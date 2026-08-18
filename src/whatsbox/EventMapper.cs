@@ -10,54 +10,71 @@ static class EventMapper
         var topic = GetString(p, "topic") ?? "";
         var kind = GetString(p, "kind") ?? "";
 
-        return (topic, kind) switch
+        return topic switch
         {
-            ("$session", "qr") => new SessionQr(GetString(p, "code") ?? ""),
-            ("$session", "paired") => new SessionPaired(GetString(p, "me") ?? ""),
-            ("$session", "pair_error") => new SessionPairError(GetString(p, "message") ?? ""),
-            ("$session", "online") => new SessionOnline(GetString(p, "me")),
-            ("$session", "offline") => new SessionOffline(GetString(p, "reason")),
-            ("$session", "logged_out") => new SessionLoggedOut(GetString(p, "reason")),
-            ("$session", "remap") => new SessionRemap(GetString(p, "from") ?? "", GetString(p, "to") ?? ""),
-            ("$session", "overflow") => new SessionOverflow(
-                GetString(p, "queue") ?? GetString(p, "overflowTopic") ?? "",
-                GetInt(p, "dropped") ?? 0),
-            ("$directory", "upsert") => new DirectoryUpsert(
-                Jid: GetString(p, "jid") ?? "",
-                EntityKind: GetString(p, "entityKind") ?? "",
-                Name: GetString(p, "name"),
-                Pn: GetString(p, "pn"),
-                Icon: GetString(p, "icon"),
-                Muted: GetBool(p, "muted") ?? false,
-                Pinned: GetBool(p, "pinned") ?? false,
-                Archived: GetBool(p, "archived") ?? false,
-                ParticipantCount: GetInt(p, "participantCount") ?? 0),
-            ("$directory", "remove") => new DirectoryRemove(GetString(p, "jid") ?? GetString(p, "id") ?? ""),
-            ("$directory", "ready") => new DirectoryReady(GetInt(p, "generated") ?? 0),
-            (_, "text") => new ChatText(topic, GetString(p, "id"), GetString(p, "by"), GetString(p, "pn"), GetString(p, "text")),
-            (_, "image") => Media<ChatImage>(topic, p, static (t, id, by, pn, text, path, err) => new(t, id, by, pn, text, path, err)),
-            (_, "video") => Media<ChatVideo>(topic, p, static (t, id, by, pn, text, path, err) => new(t, id, by, pn, text, path, err)),
-            (_, "audio") => Media<ChatAudio>(topic, p, static (t, id, by, pn, text, path, err) => new(t, id, by, pn, text, path, err)),
-            (_, "document") => Media<ChatDocument>(topic, p, static (t, id, by, pn, text, path, err) => new(t, id, by, pn, text, path, err)),
-            (_, "sticker") => Media<ChatSticker>(topic, p, static (t, id, by, pn, text, path, err) => new(t, id, by, pn, text, path, err)),
-            (_, "location") => new ChatLocation(
-                topic, GetString(p, "id"), GetString(p, "by"), GetString(p, "pn"),
-                GetDouble(p, "lat"), GetDouble(p, "lng"), GetString(p, "name"), GetString(p, "address")),
-            (_, "reaction") => new ChatReaction(
-                topic, GetString(p, "id"), GetString(p, "by"), GetString(p, "pn"),
-                GetString(p, "emoji"), GetString(p, "target")),
-            (_, "ack") => new ChatAck(topic, GetStrings(p, "ids"), GetString(p, "ack")),
-            (_, "meta") => new ChatMeta(topic, GetString(p, "action"), GetString(p, "text")),
-            (_, "unknown") => new ChatUnknown(topic, GetString(p, "id"), GetString(p, "by"), GetString(p, "pn"), GetString(p, "label")),
-            _ => null,
+            "$session" => MapSession(kind, p),
+            "$directory" => MapDirectory(kind, p),
+            _ => MapChat(p, topic),
         };
     }
 
-    static T Media<T>(
-        string topic,
-        JsonElement p,
-        Func<string, string?, string?, string?, string?, string?, string?, T> ctor)
-        => ctor(topic, GetString(p, "id"), GetString(p, "by"), GetString(p, "pn"), GetString(p, "text"), GetString(p, "path"), GetString(p, "error"));
+    static WhatsEvent? MapSession(string kind, JsonElement p) => kind switch
+    {
+        "qr" => new SessionQr(GetString(p, "code") ?? ""),
+        "paired" => new SessionPaired(GetString(p, "me") ?? ""),
+        "pair_error" => new SessionPairError(GetString(p, "message") ?? ""),
+        "online" => new SessionOnline(GetString(p, "me")),
+        "offline" => new SessionOffline(GetString(p, "reason")),
+        "logged_out" => new SessionLoggedOut(GetString(p, "reason")),
+        "remap" => new SessionRemap(GetString(p, "from") ?? "", GetString(p, "to") ?? ""),
+        "overflow" => new SessionOverflow(
+            GetString(p, "queue") ?? GetString(p, "overflowTopic") ?? "",
+            GetInt(p, "dropped") ?? 0),
+        _ => null,
+    };
+
+    static WhatsEvent? MapDirectory(string kind, JsonElement p) => kind switch
+    {
+        "upsert" => new DirectoryUpsert(
+            Jid: GetString(p, "jid") ?? "",
+            EntityKind: GetString(p, "entityKind") ?? "",
+            Name: GetString(p, "name"),
+            Pn: GetString(p, "pn"),
+            Icon: GetString(p, "icon"),
+            Muted: GetBool(p, "muted") ?? false,
+            Pinned: GetBool(p, "pinned") ?? false,
+            Archived: GetBool(p, "archived") ?? false,
+            ParticipantCount: GetInt(p, "participantCount") ?? 0),
+        "remove" => new DirectoryRemove(GetString(p, "jid") ?? GetString(p, "id") ?? ""),
+        "ready" => new DirectoryReady(GetInt(p, "generated") ?? 0),
+        _ => null,
+    };
+
+    static ChatMessage MapChat(JsonElement p, string topic)
+    {
+        try
+        {
+            if (p.Deserialize(WhatsJsonContext.Default.ChatMessage) is { } chat)
+                return chat;
+        }
+        catch (NotSupportedException)
+        {
+            // Unrecognized kind — fall through to ChatUnknown.
+        }
+        catch (JsonException)
+        {
+            // Malformed discriminator / payload — still surface a chat event.
+        }
+
+        return new ChatUnknown
+        {
+            Topic = topic,
+            Id = GetString(p, "id"),
+            By = GetString(p, "by"),
+            Pn = GetString(p, "pn"),
+            Label = GetString(p, "label"),
+        };
+    }
 
     internal static string? GetString(JsonElement e, string name)
     {
@@ -84,17 +101,6 @@ static class EventMapper
         return null;
     }
 
-    static double? GetDouble(JsonElement e, string name)
-    {
-        if (!e.TryGetProperty(name, out var p))
-            return null;
-        if (p.ValueKind == JsonValueKind.Number && p.TryGetDouble(out var n))
-            return n;
-        if (p.ValueKind == JsonValueKind.String && double.TryParse(p.GetString(), out n))
-            return n;
-        return null;
-    }
-
     static bool? GetBool(JsonElement e, string name)
     {
         if (!e.TryGetProperty(name, out var p))
@@ -105,18 +111,5 @@ static class EventMapper
             JsonValueKind.False => false,
             _ => null,
         };
-    }
-
-    static IReadOnlyList<string> GetStrings(JsonElement e, string name)
-    {
-        if (!e.TryGetProperty(name, out var p) || p.ValueKind != JsonValueKind.Array)
-            return [];
-        var list = new List<string>(p.GetArrayLength());
-        foreach (var item in p.EnumerateArray())
-        {
-            if (item.ValueKind == JsonValueKind.String && item.GetString() is { } s)
-                list.Add(s);
-        }
-        return list;
     }
 }

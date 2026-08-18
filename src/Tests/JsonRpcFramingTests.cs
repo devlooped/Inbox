@@ -47,7 +47,7 @@ public class JsonRpcFramingTests
     [Fact]
     public void Request_is_compact_ndjson_without_null_params()
     {
-        var line = JsonRpc.Request("3", "session.status", null);
+        var line = JsonRpc.Request("3", "session.status");
         Assert.DoesNotContain('\n', line);
         Assert.Contains("\"jsonrpc\":\"2.0\"", line);
         Assert.Contains("\"id\":\"3\"", line);

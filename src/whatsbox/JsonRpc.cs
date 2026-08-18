@@ -1,18 +1,32 @@
 using System.Text.Json;
+using System.Text.Json.Serialization.Metadata;
 
 namespace WhatsBox;
+
+/// <summary>NDJSON JSON-RPC 2.0 request envelope (no <c>params</c>).</summary>
+sealed class JsonRpcRequest
+{
+    public string Jsonrpc { get; init; } = JsonRpc.Version;
+    public required string Id { get; init; }
+    public required string Method { get; init; }
+}
+
+/// <summary>NDJSON JSON-RPC 2.0 request envelope with typed <c>params</c>.</summary>
+sealed class JsonRpcRequest<TParams>
+{
+    public string Jsonrpc { get; init; } = JsonRpc.Version;
+    public required string Id { get; init; }
+    public required string Method { get; init; }
+    public TParams? Params { get; init; }
+}
 
 /// <summary>NDJSON JSON-RPC 2.0 framing. One compact JSON object per line.</summary>
 static class JsonRpc
 {
     public const string Version = "2.0";
 
-    public static readonly JsonSerializerOptions SerializerOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        PropertyNameCaseInsensitive = true,
-        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
-    };
+    /// <summary>AOT-safe options backed by <see cref="WhatsJsonContext"/>.</summary>
+    public static JsonSerializerOptions SerializerOptions => WhatsJsonContext.Default.Options;
 
     public static bool TryParse(string line, out JsonRpcMessage message)
     {
@@ -58,18 +72,15 @@ static class JsonRpc
         }
     }
 
-    public static string Request(string id, string method, object? @params)
-    {
-        var payload = new Dictionary<string, object?>
-        {
-            ["jsonrpc"] = Version,
-            ["id"] = id,
-            ["method"] = method,
-        };
-        if (@params is not null)
-            payload["params"] = @params;
-        return JsonSerializer.Serialize(payload, SerializerOptions);
-    }
+    public static string Request(string id, string method)
+        => JsonSerializer.Serialize(
+            new JsonRpcRequest { Id = id, Method = method },
+            JsonRpcContext.Default.JsonRpcRequest);
+
+    public static string Request<TParams>(string id, string method, TParams @params, JsonTypeInfo<JsonRpcRequest<TParams>> typeInfo)
+        => JsonSerializer.Serialize(
+            new JsonRpcRequest<TParams> { Id = id, Method = method, Params = @params },
+            typeInfo);
 
     static string? ReadId(JsonElement root)
     {

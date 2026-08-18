@@ -4,6 +4,7 @@
     <PackageId>WhatsBox</PackageId>
     <RootNamespace>WhatsBox</RootNamespace>
     <AssemblyName>WhatsBox</AssemblyName>
+    <IsAotCompatible>true</IsAotCompatible>
     <NativeWhatsBoxName Condition="$([MSBuild]::IsOSPlatform('Windows'))">whatsbox.exe</NativeWhatsBoxName>
     <NativeWhatsBoxName Condition="'$(NativeWhatsBoxName)' == ''">whatsbox</NativeWhatsBoxName>
     <NativeWhatsBoxSourceRoot>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\..\native'))</NativeWhatsBoxSourceRoot>

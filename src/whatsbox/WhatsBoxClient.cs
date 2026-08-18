@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text.Json;
+using System.Text.Json.Serialization.Metadata;
 using System.Threading.Channels;
 
 namespace WhatsBox;
@@ -72,69 +73,80 @@ public sealed class WhatsBoxClient : IDisposable, IAsyncDisposable
     public Task<SessionSnapshot> InitializeAsync(InitializeOptions options, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(options);
-        return InvokeAsync<SessionSnapshot>("initialize", new
-        {
-            version = options.Version,
-            store = options.Store,
-            files = options.Files,
-            subscribe = options.Subscribe,
-            verbosity = options.Verbosity,
-            connect = options.Connect,
-        }, cancellationToken);
+        return InvokeAsync(
+            "initialize",
+            options,
+            JsonRpcContext.Default.JsonRpcRequestInitializeOptions,
+            WhatsJsonContext.Default.SessionSnapshot,
+            cancellationToken);
     }
 
     /// <summary>PRODUCT.md §5.2 <c>session.connect</c>.</summary>
     public Task<SessionSnapshot> ConnectAsync(CancellationToken cancellationToken = default)
-        => InvokeAsync<SessionSnapshot>("session.connect", null, cancellationToken);
+        => InvokeAsync("session.connect", WhatsJsonContext.Default.SessionSnapshot, cancellationToken);
 
     /// <summary>PRODUCT.md §5.3 <c>session.pair</c>.</summary>
     public Task<SessionSnapshot> PairAsync(CancellationToken cancellationToken = default)
-        => InvokeAsync<SessionSnapshot>("session.pair", null, cancellationToken);
+        => InvokeAsync("session.pair", WhatsJsonContext.Default.SessionSnapshot, cancellationToken);
 
     /// <summary>PRODUCT.md §5.4 <c>session.disconnect</c>.</summary>
     public Task<SessionSnapshot> DisconnectAsync(CancellationToken cancellationToken = default)
-        => InvokeAsync<SessionSnapshot>("session.disconnect", null, cancellationToken);
+        => InvokeAsync("session.disconnect", WhatsJsonContext.Default.SessionSnapshot, cancellationToken);
 
     /// <summary>PRODUCT.md §5.5 <c>session.logout</c>.</summary>
     public Task<SessionSnapshot> LogoutAsync(CancellationToken cancellationToken = default)
-        => InvokeAsync<SessionSnapshot>("session.logout", null, cancellationToken);
+        => InvokeAsync("session.logout", WhatsJsonContext.Default.SessionSnapshot, cancellationToken);
 
     /// <summary>PRODUCT.md §5.6 <c>session.status</c>.</summary>
     public Task<SessionSnapshot> StatusAsync(CancellationToken cancellationToken = default)
-        => InvokeAsync<SessionSnapshot>("session.status", null, cancellationToken);
+        => InvokeAsync("session.status", WhatsJsonContext.Default.SessionSnapshot, cancellationToken);
 
     /// <summary>PRODUCT.md §5.7 <c>subscribe</c>.</summary>
     public Task<TopicsResult> SubscribeAsync(IReadOnlyList<string> topics, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(topics);
-        return InvokeAsync<TopicsResult>("subscribe", new { topics }, cancellationToken);
+        return InvokeAsync(
+            "subscribe",
+            new TopicsParams { Topics = topics },
+            JsonRpcContext.Default.JsonRpcRequestTopicsParams,
+            WhatsJsonContext.Default.TopicsResult,
+            cancellationToken);
     }
 
     /// <summary>PRODUCT.md §5.7 <c>unsubscribe</c>.</summary>
     public Task<TopicsResult> UnsubscribeAsync(IReadOnlyList<string> topics, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(topics);
-        return InvokeAsync<TopicsResult>("unsubscribe", new { topics }, cancellationToken);
+        return InvokeAsync(
+            "unsubscribe",
+            new TopicsParams { Topics = topics },
+            JsonRpcContext.Default.JsonRpcRequestTopicsParams,
+            WhatsJsonContext.Default.TopicsResult,
+            cancellationToken);
     }
 
     /// <summary>PRODUCT.md §5.8 <c>directory.list</c>.</summary>
     public Task<DirectoryListResult> ListDirectoryAsync(DirectoryListOptions? options = null, CancellationToken cancellationToken = default)
     {
         options ??= new DirectoryListOptions();
-        return InvokeAsync<DirectoryListResult>("directory.list", new
-        {
-            query = options.Query,
-            kind = options.Kind,
-            limit = options.Limit,
-            cursor = options.Cursor,
-        }, cancellationToken);
+        return InvokeAsync(
+            "directory.list",
+            options,
+            JsonRpcContext.Default.JsonRpcRequestDirectoryListOptions,
+            WhatsJsonContext.Default.DirectoryListResult,
+            cancellationToken);
     }
 
     /// <summary>PRODUCT.md §5.9 <c>directory.get</c>.</summary>
     public Task<DirectoryRow> GetDirectoryAsync(string id, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
-        return InvokeAsync<DirectoryRow>("directory.get", new { id }, cancellationToken);
+        return InvokeAsync(
+            "directory.get",
+            new DirectoryGetParams { Id = id },
+            JsonRpcContext.Default.JsonRpcRequestDirectoryGetParams,
+            WhatsJsonContext.Default.DirectoryRow,
+            cancellationToken);
     }
 
     /// <summary>PRODUCT.md §5.10 <c>messages.send</c>.</summary>
@@ -147,14 +159,12 @@ public sealed class WhatsBoxClient : IDisposable, IAsyncDisposable
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(to);
-        return InvokeAsync<SendResult>("messages.send", new
-        {
-            to,
-            text,
-            path,
-            reply = reply is { } r ? new { id = r.Id, by = r.By } : null,
-            react = react is { } x ? new { id = x.Id, by = x.By, emoji = x.Emoji } : null,
-        }, cancellationToken);
+        return InvokeAsync(
+            "messages.send",
+            new MessagesSendParams { To = to, Text = text, Path = path, Reply = reply, React = react },
+            JsonRpcContext.Default.JsonRpcRequestMessagesSendParams,
+            WhatsJsonContext.Default.SendResult,
+            cancellationToken);
     }
 
     /// <summary>PRODUCT.md §5.11 <c>messages.read</c>.</summary>
@@ -162,13 +172,38 @@ public sealed class WhatsBoxClient : IDisposable, IAsyncDisposable
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(to);
         ArgumentNullException.ThrowIfNull(ids);
-        return InvokeAsync<ReadResult>("messages.read", new { to, ids, by }, cancellationToken);
+        return InvokeAsync(
+            "messages.read",
+            new MessagesReadParams { To = to, Ids = ids, By = by },
+            JsonRpcContext.Default.JsonRpcRequestMessagesReadParams,
+            WhatsJsonContext.Default.ReadResult,
+            cancellationToken);
     }
 
-    async Task<TResult> InvokeAsync<TResult>(string method, object? @params, CancellationToken cancellation)
+    Task<TResult> InvokeAsync<TResult>(string method, JsonTypeInfo<TResult> resultType, CancellationToken cancellation)
+        => InvokeCoreAsync(JsonRpc.Request(NextId(out var id), method), id, resultType, cancellation);
+
+    Task<TResult> InvokeAsync<TResult, TParams>(
+        string method,
+        TParams @params,
+        JsonTypeInfo<JsonRpcRequest<TParams>> requestType,
+        JsonTypeInfo<TResult> resultType,
+        CancellationToken cancellation)
+        => InvokeCoreAsync(JsonRpc.Request(NextId(out var id), method, @params, requestType), id, resultType, cancellation);
+
+    string NextId(out string id)
+    {
+        id = Interlocked.Increment(ref nextId).ToString();
+        return id;
+    }
+
+    async Task<TResult> InvokeCoreAsync<TResult>(
+        string line,
+        string id,
+        JsonTypeInfo<TResult> resultType,
+        CancellationToken cancellation)
     {
         ObjectDisposedException.ThrowIf(disposed, this);
-        var id = Interlocked.Increment(ref nextId).ToString();
         var tcs = new TaskCompletionSource<JsonRpcMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
         pending[id] = tcs;
 
@@ -179,7 +214,6 @@ public sealed class WhatsBoxClient : IDisposable, IAsyncDisposable
                 pendingTcs.TrySetCanceled(linked.Token);
         });
 
-        var line = JsonRpc.Request(id, method, @params);
         await writeLock.WaitAsync(linked.Token).ConfigureAwait(false);
         try
         {
@@ -207,8 +241,8 @@ public sealed class WhatsBoxClient : IDisposable, IAsyncDisposable
         if (response.Result is not { } result)
             throw new WhatsRpcException(-32603, "invalid_params", null);
 
-        var typed = result.Deserialize<TResult>(JsonRpc.SerializerOptions);
-        return typed ?? throw new WhatsRpcException(-32603, "invalid_params", null);
+        return result.Deserialize(resultType)
+            ?? throw new WhatsRpcException(-32603, "invalid_params", null);
     }
 
     async Task ReadLoopAsync(CancellationToken cancellation)
