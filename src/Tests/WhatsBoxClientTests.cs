@@ -16,6 +16,7 @@ public class WhatsBoxClientTests
 
         stdout.WriteLine("""{"jsonrpc":"2.0","method":"event","params":{"topic":"$session","kind":"qr","code":"2@fixture"}}""");
         stdout.WriteLine("""{"jsonrpc":"2.0","method":"event","params":{"topic":"999@lid","kind":"text","id":"3EB0","by":"999@lid","text":"hi"}}""");
+        stdout.WriteLine("""{"jsonrpc":"2.0","method":"event","params":{"topic":"999@lid","kind":"image","id":"3EB1","by":"999@lid","path":"in/p.jpg","text":"pic"}}""");
         stdout.Complete();
 
         var collected = await seen.WaitAsync(TimeSpan.FromSeconds(5));
@@ -27,6 +28,12 @@ public class WhatsBoxClientTests
         Assert.Equal("3EB0", text.Id);
         Assert.Equal("999@lid", text.By);
         Assert.Equal("hi", text.Text);
+        var image = Assert.Single(collected.OfType<ChatImage>());
+        Assert.Equal("image", image.Kind);
+        Assert.Equal("in/p.jpg", image.Path);
+        Assert.Equal("pic", image.Text);
+        Assert.IsAssignableFrom<ChatMedia>(image);
+        Assert.IsAssignableFrom<ChatMessage>(text);
     }
 
     [Fact]
@@ -78,7 +85,7 @@ public class WhatsBoxClientTests
         Assert.False(string.IsNullOrEmpty(id));
 
         stdout.WriteLine("""{"jsonrpc":"2.0","method":"event","params":{"topic":"$session","kind":"qr","code":"2@live"}}""");
-        stdout.WriteLine(RpcResult(id!, new { status = "new", topics = new[] { "$session" } }));
+        stdout.WriteLine(RpcResult(id!));
 
         var qr = await qrSeen.Task.WaitAsync(TimeSpan.FromSeconds(5));
         Assert.Equal("2@live", qr.Code);
@@ -140,19 +147,9 @@ public class WhatsBoxClientTests
             return list;
         });
 
-    static string RpcResult(string id, object result)
-        => JsonSerializer.Serialize(new Dictionary<string, object?>
-        {
-            ["jsonrpc"] = "2.0",
-            ["id"] = id,
-            ["result"] = result,
-        });
+    static string RpcResult(string id)
+        => $"{{\"jsonrpc\":\"2.0\",\"id\":\"{id}\",\"result\":{{\"status\":\"new\",\"topics\":[\"$session\"]}}}}";
 
     static string RpcError(string id, int code, string token)
-        => JsonSerializer.Serialize(new Dictionary<string, object?>
-        {
-            ["jsonrpc"] = "2.0",
-            ["id"] = id,
-            ["error"] = new { code, message = token },
-        });
+        => $"{{\"jsonrpc\":\"2.0\",\"id\":\"{id}\",\"error\":{{\"code\":{code},\"message\":\"{token}\"}}}}";
 }
