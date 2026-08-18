@@ -1,8 +1,8 @@
 bin
 obj
 out
-/native/external
 artifacts
+external
 pack
 agent-tools
 terminals
