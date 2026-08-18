@@ -58,6 +58,7 @@ public sealed record DirectoryUpsert(
     string Jid,
     string EntityKind,
     string? Name,
+    string? Handle,
     string? Pn,
     string? Icon,
     bool Muted,
@@ -101,8 +102,14 @@ public abstract record ChatMessage : WhatsEvent
     /// <summary>Author: <c>me</c> or a LID.</summary>
     public string? By { get; init; }
 
-    /// <summary>Author phone-number JID label, when known.</summary>
-    public string? Pn { get; init; }
+    /// <summary>Author WhatsApp username with a leading <c>@</c>, when known.</summary>
+    public string? Handle { get; init; }
+
+    /// <summary>Chat display name (group subject or 1:1 peer name), when known.</summary>
+    public string? TopicName { get; init; }
+
+    /// <summary>Author display name, when known. For <c>by: me</c>, the paired account’s name.</summary>
+    public string? ByName { get; init; }
 }
 
 /// <summary>Chat topic / <c>text</c>.</summary>

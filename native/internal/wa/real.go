@@ -557,13 +557,15 @@ func (r *Real) onEvent(raw any) {
 		r.emitGroupInfo(evt)
 	case *events.Contact:
 		name := ""
+		handle := ""
 		if evt.Action != nil {
 			name = evt.Action.GetFullName()
 			if name == "" {
 				name = evt.Action.GetFirstName()
 			}
+			handle = evt.Action.GetUsername()
 		}
-		r.handler.Emit(Event{Type: EvtContact, Contact: Contact{JID: evt.JID.ToNonAD().String(), Name: name}})
+		r.handler.Emit(Event{Type: EvtContact, Contact: Contact{JID: evt.JID.ToNonAD().String(), Name: name, Handle: handle}})
 	case *events.PushName:
 		r.handler.Emit(Event{Type: EvtContact, Contact: Contact{JID: evt.JID.ToNonAD().String(), Name: evt.NewPushName}})
 	case *events.Picture:
@@ -709,6 +711,7 @@ func (r *Real) emitHistory(evt *events.HistorySync) {
 		conv := Conversation{
 			ID:       c.GetID(),
 			Name:     firstName(c.GetName(), c.GetDisplayName()),
+			Handle:   c.GetUsername(),
 			Archived: c.GetArchived(),
 			Pinned:   c.GetPinned() > 0,
 			PN:       c.GetPnJID(),
@@ -720,6 +723,24 @@ func (r *Real) emitHistory(evt *events.HistorySync) {
 		// Intentionally ignore c.GetMessages() — headers only.
 		h.Conversations = append(h.Conversations, conv)
 		_ = c.GetMessages
+	}
+	for _, ic := range evt.Data.GetInlineContacts() {
+		h.InlineContacts = append(h.InlineContacts, Contact{
+			LID:    ic.GetLidJID(),
+			PN:     ic.GetPnJID(),
+			JID:    firstName(ic.GetLidJID(), ic.GetPnJID()),
+			Name:   firstName(ic.GetFullName(), ic.GetFirstName()),
+			Handle: ic.GetUsername(),
+		})
+	}
+	for _, a := range evt.Data.GetAccounts() {
+		if a.GetIsUsernameDeleted() {
+			continue
+		}
+		if u := a.GetUsername(); u != "" {
+			h.SelfHandle = u
+			break
+		}
 	}
 	r.handler.Emit(Event{Type: EvtHistory, History: h})
 }

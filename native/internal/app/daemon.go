@@ -29,17 +29,17 @@ type Options struct {
 type Daemon struct {
 	opts Options
 
-	mu          sync.Mutex
-	initialized bool
-	storeDir    string
-	verbosity   string
-	status      string // new | offline | online
-	lk          *lock.Lock
-	dir         *dirstore.Store
-	files       *files.Dir
-	wa          wa.Client
-	bus         *bus.Bus
-	eventsOn    bool
+	mu            sync.Mutex
+	initialized   bool
+	storeDir      string
+	verbosity     string
+	status        string // new | offline | online
+	lk            *lock.Lock
+	dir           *dirstore.Store
+	files         *files.Dir
+	wa            wa.Client
+	bus           *bus.Bus
+	eventsOn      bool
 	autoReconnect bool
 	reconnectMu   sync.Mutex
 	populating    bool
@@ -61,12 +61,12 @@ func New(opts Options) *Daemon {
 		opts.QueueSize = bus.DefaultBound
 	}
 	return &Daemon{
-		opts:       opts,
-		verbosity:  "warn",
-		status:     "new",
-		bus:        bus.New(opts.QueueSize),
-		log:        stderrOrDiscard(opts.Log),
-		closed:     make(chan struct{}),
+		opts:      opts,
+		verbosity: "warn",
+		status:    "new",
+		bus:       bus.New(opts.QueueSize),
+		log:       stderrOrDiscard(opts.Log),
+		closed:    make(chan struct{}),
 	}
 }
 
@@ -201,12 +201,12 @@ func (d *Daemon) dispatch(ctx context.Context, req *rpc.Request) (any, *rpc.Erro
 }
 
 type initParams struct {
-	Version    string   `json:"version"`
-	Store      string   `json:"store"`
-	Files      string   `json:"files"`
-	Subscribe  []string `json:"subscribe"`
-	Verbosity  string   `json:"verbosity"`
-	Connect    *bool    `json:"connect"`
+	Version   string   `json:"version"`
+	Store     string   `json:"store"`
+	Files     string   `json:"files"`
+	Subscribe []string `json:"subscribe"`
+	Verbosity string   `json:"verbosity"`
+	Connect   *bool    `json:"connect"`
 }
 
 func (d *Daemon) initialize(ctx context.Context, raw json.RawMessage) (any, *rpc.Error) {
@@ -362,7 +362,6 @@ type statusResult struct {
 	Version string   `json:"version,omitempty"`
 	Status  string   `json:"status"`
 	Me      string   `json:"me,omitempty"`
-	Self    string   `json:"self,omitempty"`
 	Topics  []string `json:"topics"`
 }
 
@@ -384,7 +383,6 @@ func (d *Daemon) statusSnapshot(withVersion bool) statusResult {
 	res := statusResult{
 		Status: st,
 		Me:     me,
-		Self:   me,
 		Topics: d.bus.Topics(),
 	}
 	if withVersion {

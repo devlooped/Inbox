@@ -25,7 +25,7 @@ public sealed record InitializeOptions
 /// <summary>PRODUCT.md §5.8 / §13 <c>directory.list</c> parameters.</summary>
 public sealed record DirectoryListOptions
 {
-    /// <summary>Optional match against name, <c>pn</c>, and JID string.</summary>
+    /// <summary>Optional match against name, <c>pn</c>, <c>handle</c>, and JID string.</summary>
     public string? Query { get; init; }
 
     /// <summary>Optional. <c>user</c> or <c>group</c>.</summary>
@@ -56,6 +56,12 @@ public sealed record DirectoryGetParams
 {
     /// <summary>LID, PN JID, or phone number.</summary>
     public required string Id { get; init; }
+
+    /// <summary>
+    /// When omitted, defaults to whether <c>initialize.files</c> was set.
+    /// <c>true</c> without files is <c>files_required</c>.
+    /// </summary>
+    public bool? Icon { get; init; }
 }
 
 /// <summary>PRODUCT.md §5.10 <c>messages.send</c> params.</summary>

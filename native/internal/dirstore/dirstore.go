@@ -21,23 +21,25 @@ type Store struct {
 }
 
 type Row struct {
-	Topic            string         `json:"topic"`
-	Kind             string         `json:"kind"`
-	Name             string         `json:"name,omitempty"`
-	PN               string         `json:"pn,omitempty"`
-	Icon             string         `json:"icon,omitempty"`
-	Muted            bool           `json:"muted"`
-	Pinned           bool           `json:"pinned"`
-	Archived         bool           `json:"archived"`
-	ParticipantCount int            `json:"participantCount,omitempty"`
-	Participants     []Participant  `json:"participants,omitempty"`
+	Topic            string        `json:"topic"`
+	Kind             string        `json:"kind"`
+	Name             string        `json:"name,omitempty"`
+	Handle           string        `json:"handle,omitempty"`
+	PN               string        `json:"pn,omitempty"`
+	Icon             string        `json:"icon,omitempty"`
+	Muted            bool          `json:"muted"`
+	Pinned           bool          `json:"pinned"`
+	Archived         bool          `json:"archived"`
+	ParticipantCount int           `json:"participantCount,omitempty"`
+	Participants     []Participant `json:"participants,omitempty"`
 }
 
 type Participant struct {
-	Topic string `json:"topic"`
-	Name  string `json:"name,omitempty"`
-	PN    string `json:"pn,omitempty"`
-	Role  string `json:"role,omitempty"`
+	Topic  string `json:"topic"`
+	Name   string `json:"name,omitempty"`
+	Handle string `json:"handle,omitempty"`
+	PN     string `json:"pn,omitempty"`
+	Role   string `json:"role,omitempty"`
 }
 
 func Open(storeDir string) (*Store, error) {
@@ -74,6 +76,7 @@ CREATE TABLE IF NOT EXISTS chats (
   topic TEXT PRIMARY KEY,
   kind TEXT NOT NULL,
   name TEXT,
+  handle TEXT,
   pn TEXT,
   muted INTEGER NOT NULL DEFAULT 0,
   pinned INTEGER NOT NULL DEFAULT 0,
@@ -91,22 +94,31 @@ CREATE TABLE IF NOT EXISTS participants (
   user_topic TEXT NOT NULL,
   role TEXT,
   name TEXT,
+  handle TEXT,
   PRIMARY KEY (group_topic, user_topic)
 );
 CREATE INDEX IF NOT EXISTS chats_kind ON chats(kind);
 CREATE INDEX IF NOT EXISTS chats_name ON chats(name);
 `)
-	return err
+	if err != nil {
+		return err
+	}
+	// Existing DBs created before handle existed.
+	_, _ = s.db.Exec(`ALTER TABLE chats ADD COLUMN handle TEXT`)
+	_, _ = s.db.Exec(`ALTER TABLE participants ADD COLUMN handle TEXT`)
+	return nil
 }
 
 func (s *Store) Upsert(row Row) error {
 	now := time.Now().Unix()
+	handle := NormalizeHandle(row.Handle)
 	_, err := s.db.Exec(`
-INSERT INTO chats(topic, kind, name, pn, muted, pinned, archived, participant_count, icon_id, updated_at)
-VALUES(?,?,?,?,?,?,?,?,?,?)
+INSERT INTO chats(topic, kind, name, handle, pn, muted, pinned, archived, participant_count, icon_id, updated_at)
+VALUES(?,?,?,?,?,?,?,?,?,?,?)
 ON CONFLICT(topic) DO UPDATE SET
   kind=excluded.kind,
   name=COALESCE(NULLIF(excluded.name,''), chats.name),
+  handle=COALESCE(NULLIF(excluded.handle,''), chats.handle),
   pn=COALESCE(NULLIF(excluded.pn,''), chats.pn),
   muted=excluded.muted,
   pinned=excluded.pinned,
@@ -114,7 +126,7 @@ ON CONFLICT(topic) DO UPDATE SET
   participant_count=CASE WHEN excluded.participant_count=0 THEN chats.participant_count ELSE excluded.participant_count END,
   icon_id=COALESCE(excluded.icon_id, chats.icon_id),
   updated_at=excluded.updated_at
-`, row.Topic, row.Kind, row.Name, row.PN, boolInt(row.Muted), boolInt(row.Pinned), boolInt(row.Archived), row.ParticipantCount, nullIfEmpty(row.Icon), now)
+`, row.Topic, row.Kind, row.Name, handle, row.PN, boolInt(row.Muted), boolInt(row.Pinned), boolInt(row.Archived), row.ParticipantCount, nullIfEmpty(row.Icon), now)
 	if err != nil {
 		return err
 	}
@@ -123,8 +135,8 @@ ON CONFLICT(topic) DO UPDATE SET
 			return err
 		}
 		for _, p := range row.Participants {
-			if _, err := s.db.Exec(`INSERT OR REPLACE INTO participants(group_topic, user_topic, role, name) VALUES(?,?,?,?)`,
-				row.Topic, p.Topic, p.Role, p.Name); err != nil {
+			if _, err := s.db.Exec(`INSERT OR REPLACE INTO participants(group_topic, user_topic, role, name, handle) VALUES(?,?,?,?,?)`,
+				row.Topic, p.Topic, p.Role, p.Name, NormalizeHandle(p.Handle)); err != nil {
 				return err
 			}
 		}
@@ -165,10 +177,10 @@ func (s *Store) Get(id string) (Row, bool, error) {
 func (s *Store) getExact(id string) (Row, bool, error) {
 	var r Row
 	var muted, pinned, archived int
-	var name, pn, icon sql.NullString
+	var name, handle, pn, icon sql.NullString
 	err := s.db.QueryRow(`
-SELECT topic, kind, name, pn, muted, pinned, archived, participant_count, icon_id
-FROM chats WHERE topic=?`, id).Scan(&r.Topic, &r.Kind, &name, &pn, &muted, &pinned, &archived, &r.ParticipantCount, &icon)
+SELECT topic, kind, name, handle, pn, muted, pinned, archived, participant_count, icon_id
+FROM chats WHERE topic=?`, id).Scan(&r.Topic, &r.Kind, &name, &handle, &pn, &muted, &pinned, &archived, &r.ParticipantCount, &icon)
 	if err == sql.ErrNoRows {
 		return Row{}, false, nil
 	}
@@ -176,6 +188,7 @@ FROM chats WHERE topic=?`, id).Scan(&r.Topic, &r.Kind, &name, &pn, &muted, &pinn
 		return Row{}, false, err
 	}
 	r.Name = name.String
+	r.Handle = handle.String
 	r.PN = pn.String
 	r.Icon = icon.String
 	r.Muted = muted != 0
@@ -185,20 +198,21 @@ FROM chats WHERE topic=?`, id).Scan(&r.Topic, &r.Kind, &name, &pn, &muted, &pinn
 }
 
 func (s *Store) Participants(group string) ([]Participant, error) {
-	rows, err := s.db.Query(`SELECT user_topic, role, name FROM participants WHERE group_topic=? ORDER BY user_topic`, group)
+	rows, err := s.db.Query(`SELECT user_topic, role, name, handle FROM participants WHERE group_topic=? ORDER BY user_topic`, group)
 	if err != nil {
 		return nil, err
 	}
 	var out []Participant
 	for rows.Next() {
 		var p Participant
-		var role, name sql.NullString
-		if err := rows.Scan(&p.Topic, &role, &name); err != nil {
+		var role, name, handle sql.NullString
+		if err := rows.Scan(&p.Topic, &role, &name, &handle); err != nil {
 			_ = rows.Close()
 			return nil, err
 		}
 		p.Role = role.String
 		p.Name = name.String
+		p.Handle = handle.String
 		out = append(out, p)
 	}
 	err = rows.Err()
@@ -247,10 +261,10 @@ func (s *Store) List(query, kind string, limit int, cursor string) ([]Row, strin
 	}
 	if q != "" {
 		like := "%" + q + "%"
-		where = append(where, "(IFNULL(name,'') LIKE ? OR IFNULL(pn,'') LIKE ? OR topic LIKE ?)")
-		args = append(args, like, like, like)
+		where = append(where, "(IFNULL(name,'') LIKE ? OR IFNULL(pn,'') LIKE ? OR IFNULL(handle,'') LIKE ? OR topic LIKE ?)")
+		args = append(args, like, like, like, like)
 	}
-	sqlStr := `SELECT topic, kind, name, pn, muted, pinned, archived, participant_count, icon_id FROM chats`
+	sqlStr := `SELECT topic, kind, name, handle, pn, muted, pinned, archived, participant_count, icon_id FROM chats`
 	if len(where) > 0 {
 		sqlStr += " WHERE " + strings.Join(where, " AND ")
 	}
@@ -265,11 +279,12 @@ func (s *Store) List(query, kind string, limit int, cursor string) ([]Row, strin
 	for rows.Next() {
 		var r Row
 		var muted, pinned, archived int
-		var name, pn, icon sql.NullString
-		if err := rows.Scan(&r.Topic, &r.Kind, &name, &pn, &muted, &pinned, &archived, &r.ParticipantCount, &icon); err != nil {
+		var name, handle, pn, icon sql.NullString
+		if err := rows.Scan(&r.Topic, &r.Kind, &name, &handle, &pn, &muted, &pinned, &archived, &r.ParticipantCount, &icon); err != nil {
 			return nil, "", err
 		}
 		r.Name = name.String
+		r.Handle = handle.String
 		r.PN = pn.String
 		r.Muted = muted != 0
 		r.Pinned = pinned != 0
@@ -349,7 +364,7 @@ func (s *Store) ContainsText(text string) bool {
 	}
 	var n int
 	like := "%" + text + "%"
-	err := s.db.QueryRow(`SELECT COUNT(*) FROM chats WHERE IFNULL(name,'') LIKE ? OR IFNULL(pn,'') LIKE ? OR IFNULL(icon_id,'') LIKE ? OR topic LIKE ?`, like, like, like, like).Scan(&n)
+	err := s.db.QueryRow(`SELECT COUNT(*) FROM chats WHERE IFNULL(name,'') LIKE ? OR IFNULL(pn,'') LIKE ? OR IFNULL(handle,'') LIKE ? OR IFNULL(icon_id,'') LIKE ? OR topic LIKE ?`, like, like, like, like, like).Scan(&n)
 	return err == nil && n > 0
 }
 
@@ -365,6 +380,18 @@ func nullIfEmpty(s string) any {
 		return nil
 	}
 	return s
+}
+
+// NormalizeHandle returns a leading-@ username, or "" if s is empty / "-".
+func NormalizeHandle(s string) string {
+	s = strings.TrimSpace(s)
+	for strings.HasPrefix(s, "@") {
+		s = strings.TrimSpace(strings.TrimPrefix(s, "@"))
+	}
+	if s == "" || s == "-" {
+		return ""
+	}
+	return "@" + s
 }
 
 func phoneOf(s string) string {

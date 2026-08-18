@@ -118,6 +118,41 @@ public class WhatsBoxClientTests
     }
 
     [Fact]
+    public async Task GetDirectory_omits_icon_when_null_and_writes_when_set()
+    {
+        var stdout = new LineSource();
+        var stdin = new LineSink();
+        await using var client = new WhatsBoxClient(stdout, stdin);
+
+        var omitted = client.GetDirectoryAsync("999@lid");
+        var line1 = await stdin.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(5));
+        using (var req = JsonDocument.Parse(line1))
+        {
+            Assert.Equal("directory.get", req.RootElement.GetProperty("method").GetString());
+            var p = req.RootElement.GetProperty("params");
+            Assert.Equal("999@lid", p.GetProperty("id").GetString());
+            Assert.False(p.TryGetProperty("icon", out _));
+            var id = req.RootElement.GetProperty("id").GetString();
+            stdout.WriteLine($"{{\"jsonrpc\":\"2.0\",\"id\":\"{id}\",\"result\":{{\"topic\":\"999@lid\",\"kind\":\"user\"}}}}");
+        }
+        var row = await omitted.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal("999@lid", row.Topic);
+
+        var withIcon = client.GetDirectoryAsync("999@lid", icon: false);
+        var line2 = await stdin.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(5));
+        using (var req = JsonDocument.Parse(line2))
+        {
+            var p = req.RootElement.GetProperty("params");
+            Assert.False(p.GetProperty("icon").GetBoolean());
+            var id = req.RootElement.GetProperty("id").GetString();
+            stdout.WriteLine($"{{\"jsonrpc\":\"2.0\",\"id\":\"{id}\",\"result\":{{\"topic\":\"999@lid\",\"kind\":\"user\",\"handle\":\"@ada\"}}}}");
+        }
+        var row2 = await withIcon.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal("@ada", row2.Handle);
+        stdout.Complete();
+    }
+
+    [Fact]
     public async Task Initialize_fresh_store_status_new()
     {
         var store = Path.Combine(Path.GetTempPath(), "whatsbox-test-" + Guid.NewGuid().ToString("N"));

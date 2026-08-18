@@ -31,13 +31,13 @@ type testClient struct {
 	cancel context.CancelFunc
 	done   chan error
 
-	mu      sync.Mutex
-	events  []map[string]any
-	resps   map[string]map[string]any
-	nextID  int
-	got     chan struct{}
-	readMu  sync.Mutex
-	paused  bool
+	mu     sync.Mutex
+	events []map[string]any
+	resps  map[string]map[string]any
+	nextID int
+	got    chan struct{}
+	readMu sync.Mutex
+	paused bool
 }
 
 func startDaemon(t *testing.T, fake *wa.Fake, queue int) *testClient {
@@ -445,8 +445,11 @@ func TestConnectNewEmitsQRThenOnline(t *testing.T) {
 	if res["status"] != "online" {
 		t.Fatalf("status=%v", res["status"])
 	}
-	if res["me"] != "111@lid" && res["self"] != "111@lid" {
-		t.Fatalf("me=%v self=%v", res["me"], res["self"])
+	if res["me"] != "111@lid" {
+		t.Fatalf("me=%v", res["me"])
+	}
+	if _, ok := res["self"]; ok {
+		t.Fatalf("self must not be present: %v", res)
 	}
 	_ = c.waitEvent("paired", time.Second)
 	_ = c.waitEvent("online", time.Second)
@@ -460,8 +463,11 @@ func TestPairNoopWhenLinkedAndDisconnectLogout(t *testing.T) {
 	if res["status"] != "offline" {
 		t.Fatalf("status=%v", res["status"])
 	}
-	if res["me"] != "111@lid" && res["self"] != "111@lid" {
+	if res["me"] != "111@lid" {
 		t.Fatalf("me missing: %v", res)
+	}
+	if _, ok := res["self"]; ok {
+		t.Fatalf("self must not be present: %v", res)
 	}
 	pair := c.mustCall("session.pair", nil)
 	if pair["status"] != "offline" {
@@ -478,8 +484,11 @@ func TestPairNoopWhenLinkedAndDisconnectLogout(t *testing.T) {
 	if off["status"] != "offline" {
 		t.Fatalf("disconnect status=%v", off["status"])
 	}
-	if off["me"] != "111@lid" && off["self"] != "111@lid" {
+	if off["me"] != "111@lid" {
 		t.Fatalf("me should remain after disconnect: %v", off)
+	}
+	if _, ok := off["self"]; ok {
+		t.Fatalf("self must not be present: %v", off)
 	}
 
 	// logout wipes identity + dbs
@@ -551,7 +560,7 @@ func TestSubscribeNormalizeAndAtomic(t *testing.T) {
 func TestDirectoryListGetAndPopulate(t *testing.T) {
 	fake := wa.NewFake()
 	fake.SetPaired("111@lid")
-	fake.SetContacts([]wa.Contact{{LID: "999@lid", PN: "15551234567@s.whatsapp.net", Name: "Ada"}})
+	fake.SetContacts([]wa.Contact{{LID: "999@lid", PN: "15551234567@s.whatsapp.net", Name: "Ada", Handle: "ada"}})
 	fake.SetGroups([]wa.Group{{
 		JID:  "12036342@g.us",
 		Name: "Team",
@@ -593,8 +602,26 @@ func TestDirectoryListGetAndPopulate(t *testing.T) {
 	if got["topic"] != "999@lid" {
 		t.Fatalf("get topic=%v", got["topic"])
 	}
+	if got["handle"] != "@ada" {
+		t.Fatalf("handle=%v", got["handle"])
+	}
 	if got["icon"] == nil || !strings.HasPrefix(fmt.Sprint(got["icon"]), "in/_dir/") {
 		t.Fatalf("icon=%v", got["icon"])
+	}
+
+	byHandle := c.mustCall("directory.list", map[string]any{"query": "@ada"})
+	hitems, _ := byHandle["items"].([]any)
+	if len(hitems) == 0 {
+		t.Fatalf("list query handle empty: %v", byHandle)
+	}
+
+	iconsBefore := fake.IconCalls
+	noIcon := c.mustCall("directory.get", map[string]any{"id": "999@lid", "icon": false})
+	if _, ok := noIcon["icon"]; ok && noIcon["icon"] != "" {
+		t.Fatalf("icon:false returned icon=%v", noIcon["icon"])
+	}
+	if fake.IconCalls != iconsBefore {
+		t.Fatalf("icon:false fetched icon (%d -> %d)", iconsBefore, fake.IconCalls)
 	}
 
 	g := c.mustCall("directory.get", map[string]any{"id": "12036342@g.us"})
@@ -604,6 +631,102 @@ func TestDirectoryListGetAndPopulate(t *testing.T) {
 	_, err := c.call("directory.get", map[string]any{"id": "404@lid"})
 	if err == nil || err.Message != rpc.TokNotFound {
 		t.Fatalf("want not_found, got %#v", err)
+	}
+
+	// no files + icon:true
+	c2fake := wa.NewFake()
+	c2fake.SetPaired("111@lid")
+	c2fake.SetContacts([]wa.Contact{{LID: "999@lid", Name: "Ada"}})
+	c2 := startDaemon(t, c2fake, 0)
+	_ = c2.mustInit(map[string]any{"connect": true, "subscribe": []string{"$directory"}})
+	_ = c2.waitEvent("ready", 3*time.Second)
+	_, err = c2.call("directory.get", map[string]any{"id": "999@lid", "icon": true})
+	if err == nil || err.Message != rpc.TokFilesRequired {
+		t.Fatalf("want files_required, got %#v", err)
+	}
+	okGet := c2.mustCall("directory.get", map[string]any{"id": "999@lid"})
+	if _, has := okGet["icon"]; has && okGet["icon"] != "" {
+		t.Fatalf("no files omitted icon: %v", okGet["icon"])
+	}
+}
+
+func TestEventIdentityFields(t *testing.T) {
+	fake := wa.NewFake()
+	fake.SetPaired("111@lid")
+	fake.SetContacts([]wa.Contact{
+		{LID: "999@lid", PN: "15551234567@s.whatsapp.net", Name: "Ada", Handle: "@ada"},
+		{LID: "111@lid", Name: "MeName", Handle: "mehandle"},
+	})
+	fake.SetGroups([]wa.Group{{
+		JID:  "12036342@g.us",
+		Name: "Team",
+		Participants: []wa.Participant{
+			{JID: "999@lid", Name: "+1∙∙∙∙∙∙∙∙80"},
+			{JID: "888@lid", Name: "Bob"},
+		},
+	}})
+	c := startDaemon(t, fake, 0)
+	_ = c.mustInit(map[string]any{"connect": true, "subscribe": []string{"$directory", "999@lid", "12036342@g.us"}})
+	_ = c.waitEvent("ready", 3*time.Second)
+
+	fake.Inject(wa.Event{Type: wa.EvtMessage, Chat: "999@lid", ID: "t1", Sender: "999@lid", Kind: "text", Text: "hello"})
+	txt := c.waitEvent("text", time.Second)
+	if txt["id"] != "t1" {
+		t.Fatalf("text=%v", txt)
+	}
+	if _, ok := txt["pn"]; ok {
+		t.Fatalf("pn on event: %v", txt)
+	}
+	if txt["handle"] != "@ada" || txt["topicName"] != "Ada" || txt["byName"] != "Ada" {
+		t.Fatalf("1:1 identity=%v", txt)
+	}
+
+	fake.Inject(wa.Event{Type: wa.EvtMessage, Chat: "12036342@g.us", ID: "g1", Sender: "999@lid", Kind: "text", Text: "hi team"})
+	gt := c.waitEventWhere(time.Second, func(ev map[string]any) bool {
+		return ev["kind"] == "text" && ev["id"] == "g1"
+	})
+	if gt["topicName"] != "Team" {
+		t.Fatalf("group topicName=%v", gt["topicName"])
+	}
+	if gt["byName"] != "Ada" {
+		t.Fatalf("group byName should be contact name, not redacted DisplayName: %v", gt)
+	}
+	if gt["handle"] != "@ada" {
+		t.Fatalf("group handle=%v", gt["handle"])
+	}
+
+	fake.Inject(wa.Event{Type: wa.EvtMessage, Chat: "999@lid", ID: "m1", Sender: "111@lid", FromMe: true, Kind: "text", Text: "from me"})
+	mine := c.waitEventWhere(time.Second, func(ev map[string]any) bool {
+		return ev["kind"] == "text" && ev["id"] == "m1"
+	})
+	if mine["by"] != "me" {
+		t.Fatalf("from-me by=%v", mine["by"])
+	}
+	if mine["byName"] != "MeName" {
+		t.Fatalf("from-me byName=%v", mine["byName"])
+	}
+	if mine["handle"] != "@mehandle" {
+		t.Fatalf("from-me handle=%v", mine["handle"])
+	}
+	if mine["topicName"] != "Ada" {
+		t.Fatalf("from-me topicName=%v", mine["topicName"])
+	}
+
+	fake.Inject(wa.Event{
+		Type: wa.EvtHistory,
+		History: wa.HistorySync{
+			InlineContacts: []wa.Contact{{LID: "888@lid", Name: "Cara", Handle: "cara"}},
+			SelfHandle:     "selfuser",
+		},
+	})
+	time.Sleep(50 * time.Millisecond)
+	cara := c.mustCall("directory.get", map[string]any{"id": "888@lid"})
+	if cara["handle"] != "@cara" || cara["name"] != "Cara" {
+		t.Fatalf("inline contact=%v", cara)
+	}
+	meRow := c.mustCall("directory.get", map[string]any{"id": "111@lid"})
+	if meRow["handle"] != "@selfuser" {
+		t.Fatalf("me handle after history=%v", meRow)
 	}
 }
 
@@ -747,7 +870,7 @@ func TestChatEventsDiscardOverflowSendRead(t *testing.T) {
 		return ev["kind"] == "text" && ev["by"] == "me" && ev["id"] == sent["id"]
 	})
 	if me["by"] != "me" {
-		t.Fatalf("self event by=%v", me["by"])
+		t.Fatalf("me event by=%v", me["by"])
 	}
 
 	// reply / react validation

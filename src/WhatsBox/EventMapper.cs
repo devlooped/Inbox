@@ -39,6 +39,7 @@ static class EventMapper
             Jid: GetString(p, "jid") ?? "",
             EntityKind: GetString(p, "entityKind") ?? "",
             Name: GetString(p, "name"),
+            Handle: GetString(p, "handle"),
             Pn: GetString(p, "pn"),
             Icon: GetString(p, "icon"),
             Muted: GetBool(p, "muted") ?? false,
@@ -71,7 +72,9 @@ static class EventMapper
             Topic = topic,
             Id = GetString(p, "id"),
             By = GetString(p, "by"),
-            Pn = GetString(p, "pn"),
+            Handle = GetString(p, "handle"),
+            TopicName = GetString(p, "topicName"),
+            ByName = GetString(p, "byName"),
             Label = GetString(p, "label"),
         };
     }

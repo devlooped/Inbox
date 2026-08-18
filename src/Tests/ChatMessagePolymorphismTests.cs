@@ -8,7 +8,7 @@ public class ChatMessagePolymorphismTests
     [Fact]
     public void Discriminator_selects_text_when_kind_is_not_first()
     {
-        const string json = """{"topic":"999@lid","kind":"text","id":"3EB0","by":"999@lid","pn":"1555@s.whatsapp.net","text":"hi"}""";
+        const string json = """{"topic":"999@lid","kind":"text","id":"3EB0","by":"999@lid","handle":"@ada","topicName":"Ada","byName":"Ada","text":"hi"}""";
         var ev = JsonSerializer.Deserialize(json, WhatsJsonContext.Default.ChatMessage);
 
         var text = Assert.IsType<ChatText>(ev);
@@ -16,7 +16,9 @@ public class ChatMessagePolymorphismTests
         Assert.Equal("999@lid", text.Topic);
         Assert.Equal("3EB0", text.Id);
         Assert.Equal("999@lid", text.By);
-        Assert.Equal("1555@s.whatsapp.net", text.Pn);
+        Assert.Equal("@ada", text.Handle);
+        Assert.Equal("Ada", text.TopicName);
+        Assert.Equal("Ada", text.ByName);
         Assert.Equal("hi", text.Text);
     }
 
@@ -70,5 +72,19 @@ public class ChatMessagePolymorphismTests
         Assert.Equal("999@lid", unknown.Topic);
         Assert.Equal("9", unknown.Id);
         Assert.Equal("poll", unknown.Label);
+    }
+
+    [Fact]
+    public void Mapper_reads_directory_upsert_handle()
+    {
+        using var doc = JsonDocument.Parse(
+            """{"topic":"$directory","kind":"upsert","jid":"999@lid","entityKind":"user","name":"Ada","handle":"@ada","pn":"1555@s.whatsapp.net"}""");
+        var ev = EventMapper.TryMap(doc.RootElement);
+
+        var upsert = Assert.IsType<DirectoryUpsert>(ev);
+        Assert.Equal("999@lid", upsert.Jid);
+        Assert.Equal("Ada", upsert.Name);
+        Assert.Equal("@ada", upsert.Handle);
+        Assert.Equal("1555@s.whatsapp.net", upsert.Pn);
     }
 }

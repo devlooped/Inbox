@@ -167,7 +167,7 @@ func (d *Daemon) applyMapping(lid, pn string) {
 			row.PN = pn
 			_ = st.Upsert(row)
 		} else {
-			_ = st.Upsert(userRow(lid, pn, ""))
+			_ = st.Upsert(userRow(lid, pn, "", ""))
 		}
 	}
 	if d.bus.Has(pn) && pn != lid {

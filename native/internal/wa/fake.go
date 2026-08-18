@@ -30,6 +30,7 @@ type Fake struct {
 
 	ConnectCalls  int
 	DownloadCalls []any
+	IconCalls     int
 	Dialed        bool
 	Presence      []string
 	Sent          []any
@@ -333,6 +334,7 @@ func (f *Fake) GetProfileIcon(ctx context.Context, jid string) (*ProfileIcon, er
 		return nil, err
 	}
 	f.mu.Lock()
+	f.IconCalls++
 	defer f.mu.Unlock()
 	if ic, ok := f.icons[jid]; ok {
 		cp := ic

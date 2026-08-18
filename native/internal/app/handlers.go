@@ -108,7 +108,8 @@ func (d *Daemon) directoryList(raw json.RawMessage) (any, *rpc.Error) {
 }
 
 type getParams struct {
-	ID string `json:"id"`
+	ID   string `json:"id"`
+	Icon *bool  `json:"icon"`
 }
 
 func (d *Daemon) directoryGet(ctx context.Context, raw json.RawMessage) (any, *rpc.Error) {
@@ -141,10 +142,19 @@ func (d *Daemon) directoryGet(ctx context.Context, raw json.RawMessage) (any, *r
 		ps, _ := st.Participants(row.Topic)
 		row.Participants = ps
 	}
-	if fd := d.filesDir(); fd.Enabled() {
+	wantIcon := d.filesDir().Enabled()
+	if p.Icon != nil {
+		wantIcon = *p.Icon
+	}
+	if wantIcon && !d.filesDir().Enabled() {
+		return nil, rpc.Err(rpc.TokFilesRequired)
+	}
+	if wantIcon {
 		if ic, ierr := d.fetchIcon(ctx, row.Topic); ierr == nil && ic != "" {
 			row.Icon = ic
 		}
+	} else {
+		row.Icon = ""
 	}
 	return rowJSON(row, true), nil
 }
@@ -229,6 +239,9 @@ func rowJSON(row dirstore.Row, includeParticipants bool) map[string]any {
 	if row.Name != "" {
 		m["name"] = row.Name
 	}
+	if h := dirstore.NormalizeHandle(row.Handle); h != "" {
+		m["handle"] = h
+	}
 	if row.PN != "" {
 		m["pn"] = row.PN
 	}
@@ -245,6 +258,9 @@ func rowJSON(row dirstore.Row, includeParticipants bool) map[string]any {
 			if p.Name != "" {
 				pm["name"] = p.Name
 			}
+			if h := dirstore.NormalizeHandle(p.Handle); h != "" {
+				pm["handle"] = h
+			}
 			if p.PN != "" {
 				pm["pn"] = p.PN
 			}
@@ -255,8 +271,8 @@ func rowJSON(row dirstore.Row, includeParticipants bool) map[string]any {
 	return m
 }
 
-func userRow(lid, pn, name string) dirstore.Row {
-	return dirstore.Row{Topic: lid, Kind: "user", PN: pn, Name: name}
+func userRow(lid, pn, name, handle string) dirstore.Row {
+	return dirstore.Row{Topic: lid, Kind: "user", PN: pn, Name: name, Handle: dirstore.NormalizeHandle(handle)}
 }
 
 func groupRow(jid, name string, parts []dirstore.Participant) dirstore.Row {
@@ -369,6 +385,7 @@ func (d *Daemon) messagesSend(ctx context.Context, raw json.RawMessage) (any, *r
 			"id":    id,
 			"by":    "me",
 		}
+		d.decorateChat(ev, canon, "me", "")
 		if evText != "" {
 			ev["text"] = evText
 		}

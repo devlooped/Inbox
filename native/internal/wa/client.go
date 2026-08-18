@@ -98,9 +98,11 @@ type Event struct {
 }
 
 type HistorySync struct {
-	Conversations []Conversation
-	Mappings      []Mapping
-	PushNames     []PushName
+	Conversations  []Conversation
+	Mappings       []Mapping
+	PushNames      []PushName
+	InlineContacts []Contact
+	SelfHandle     string
 	// Messages are accepted on the wire from WhatsApp but must never be
 	// persisted or emitted. Tests inject them to prove discard.
 	Messages []HistMessage
@@ -109,6 +111,7 @@ type HistorySync struct {
 type Conversation struct {
 	ID           string
 	Name         string
+	Handle       string
 	Archived     bool
 	Pinned       bool
 	PN           string
@@ -140,10 +143,11 @@ type PhoneInfo struct {
 }
 
 type Contact struct {
-	JID  string
-	LID  string
-	PN   string
-	Name string
+	JID    string
+	LID    string
+	PN     string
+	Name   string
+	Handle string
 }
 
 type Group struct {
@@ -153,10 +157,11 @@ type Group struct {
 }
 
 type Participant struct {
-	JID  string
-	PN   string
-	Name string
-	Role string
+	JID    string
+	PN     string
+	Name   string
+	Handle string
+	Role   string
 }
 
 type ProfileIcon struct {

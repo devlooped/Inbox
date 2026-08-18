@@ -205,6 +205,7 @@ When a LID↔PN mapping appears later (HistorySync, group participants, usync):
 - **Reply and react:** `by` is **required** (1:1 and groups). Clients copy it from the inbound event. Use `"me"` when targeting their own message.
 - **`messages.read`:** `by` is **required for groups** (and all `ids` in that call must share that author — whatsmeow `MarkRead` constraint). **Omit in 1:1.**
 - **Inbound events:** `by` is `"me"` or a LID. There is no separate `self` field.
+- **Status snapshot:** the paired LID is `me` only. Do not also emit `self`.
 
 Why `id` alone is not enough is specified in §11 (trade-offs) and follows WhatsApp’s key `(chat, id, fromMe, participant)`.
 
@@ -258,10 +259,10 @@ Apply `subscribe` (plus implicit `$session`) **before** any event is eligible fo
 **Result** (example, `connect` omitted / false, already paired)
 
 ```json
-{"version":"0.1","status":"offline","self":"111@lid","topics":["$session","$directory"]}
+{"version":"0.1","status":"offline","me":"111@lid","topics":["$session","$directory"]}
 ```
 
-If never paired and `connect` is not true: `"status":"new"`, `self` omitted.
+If never paired and `connect` is not true: `"status":"new"`, `me` omitted.
 
 Subscriptions from `initialize.subscribe` plus implicit `$session` are reflected in `topics` (canonicalized).
 
@@ -341,7 +342,7 @@ See §2.4. Result is `session.status` with `status: "new"`.
 
 | Field | Description |
 |---|---|
-| `query` | Optional. Matches name, `pn`, and LID/group JID string. |
+| `query` | Optional. Matches name, `pn`, `handle`, and LID/group JID string. |
 | `kind` | Optional. `user` \| `group`. |
 | `limit` | Optional. Implementation default (e.g. 50), max 100. |
 | `cursor` | Opaque; omit or `""` for the first page. |
@@ -353,12 +354,25 @@ There is **no** sort-by-last-message (we do not store it). Order: implementation
 ### 5.9 `directory.get`
 
 ```json
-{"id":"+15551234567"}
+{"id":"+15551234567","icon":false}
 ```
 
-**Result:** one `DirectoryRow`. Groups include `participants` (canonical JIDs + names if known).
+| Field | Description |
+|---|---|
+| `id` | LID, PN JID, or phone number. Required. |
+| `icon` | Optional. When omitted, defaults to **whether `initialize.files` was set**. |
 
-If `files` was set: fetch the current profile/group **preview** icon, write it under `files` (see §8), set `icon` to that relative path. If `files` was not set, omit `icon`.
+**Result:** one `DirectoryRow`. Groups include `participants` (canonical JIDs + names / `pn` / `handle` if known).
+
+| `icon` | `files` set | Behavior |
+|---|---|---|
+| omitted | yes | Fetch preview icon (write under `files`, set `icon` on the result). |
+| omitted | no | Do not fetch; omit `icon`. |
+| `true` | yes | Fetch. |
+| `true` | no | Error `files_required`. |
+| `false` | either | Never fetch; omit `icon` even if a previous get stored an icon path. |
+
+`list` / `$directory` upsert never carry `icon`.
 
 Missing entity → error `not_found`.
 
@@ -467,15 +481,22 @@ Common fields on message-like events:
   "kind": "text",
   "id": "3EB0…",
   "by": "999@lid",
-  "pn": "1555…@s.whatsapp.net",
+  "handle": "@ada",
+  "topicName": "Family",
+  "byName": "Ada",
   "text": "hi"
 }
 ```
 
 - `by` is `"me"` or a LID.
-- `pn` is optional, when known (label only).
+- `handle` is the author’s WhatsApp username **with a leading `@`**, when known. Omit otherwise. Stored and emitted with `@` so `handle ?? byName ?? by` is unambiguous.
+- `topicName` is the chat’s display name (group subject, or the 1:1 peer’s name). Omit if unknown.
+- `byName` is the author’s display name (contact / push / real in-group name). When `by` is `"me"`, this is the paired account’s directory name if known. Omit if unknown.
+- There is no `pn` on chat events. The phone JID lives on the directory row; look up `by` (or the 1:1 `topic`) via `directory.get` when needed.
 - `path` is relative to `files` when media was written.
 - Unsubscribed chats: **protocol-ack, then drop**. No event, no download.
+
+`ack` and `meta` still get `topicName` when known. `handle` / `byName` only when `by` is present. Location `name` is the place name, not `topicName`. `unknown` `label` is the kind hint (`view_once`, `poll`), not a person name.
 
 ### 6.4 Delivery semantics
 
@@ -502,6 +523,7 @@ Per-topic in-memory queue (recommend 256). On overflow: drop **oldest**, emit `$
   "topic": "999@lid",
   "kind": "user",
   "name": "Ada",
+  "handle": "@ada",
   "pn": "15551234567@s.whatsapp.net",
   "icon": "in/_dir/999_at_lid.jpg",
   "muted": false,
@@ -516,11 +538,12 @@ Per-topic in-memory queue (recommend 256). On overflow: drop **oldest**, emit `$
 | `topic` | all | Canonical JID. |
 | `kind` | all | `user` \| `group`. |
 | `name` | all | Best display name (contact full/push, group subject). |
-| `pn` | user | Label; may be missing or change. |
-| `icon` | all | Relative path under `files`. Only after `directory.get` with `files` set. Not on list/upsert by default. |
+| `handle` | user | WhatsApp username with a leading `@`. May be missing. Groups omit. |
+| `pn` | user | Phone-number JID label; may be missing or change. Not on chat events. |
+| `icon` | all | Relative path under `files`. Only after `directory.get` when `icon` is true (or omitted and `files` was set). Not on list/upsert by default. |
 | `muted` `pinned` `archived` | all | From app-state. |
 | `participantCount` | group | Optional; **not** the full roster. |
-| `participants` | group, **`get` only** | `[{topic, name?, pn?}]`. |
+| `participants` | group, **`get` only** | `[{topic, name?, pn?, handle?}]`. |
 
 No `lastMessage`, no preview text, no unread counts derived from bodies.
 
@@ -528,10 +551,10 @@ No `lastMessage`, no preview text, no unread counts derived from bodies.
 
 Normative intent, not a frozen migration:
 
-- `chats(topic PK, kind, name, pn, muted, pinned, archived, participant_count, icon_id, updated_at)`
+- `chats(topic PK, kind, name, handle, pn, muted, pinned, archived, participant_count, icon_id, updated_at)`
 - `contacts` may be folded into `chats` where `kind=user`, or a sibling table keyed by LID.
 - `lid_map(lid PK, pn UNIQUE)` — labels + resolution cache.
-- `participants(group_topic, user_topic, role, name)` — for `directory.get`, not for `$directory` upserts.
+- `participants(group_topic, user_topic, role, name, handle)` — for `directory.get`, not for `$directory` upserts.
 
 Never: `messages`, FTS, media keys-as-history.
 
@@ -665,7 +688,7 @@ Decisions from the design session, with the alternative we rejected.
 | `unknown` kind instead of dropping or full proto | Expose `waE2E.Message` oneof | Stream stays honest without shipping WhatsApp’s union to agents. |
 | Bounded queue + visible overflow | Block WA loop, or silent drop | Session stays up; loss is observable. |
 | Logout wipes whatsmeow **and** `whatsbox.db` | Keep directory across logout | Directory is the previous account’s address book. |
-| Status `new` \| `offline` \| `online` | `paired`/`disconnected` or booleans | Three exclusive states. `new` = no `self`. |
+| Status `new` \| `offline` \| `online` | `paired`/`disconnected` or booleans | Three exclusive states. `new` = no `me`. |
 | Send result `{id, topic}` only | Also timestamp; or echo without subscribe | `topic` is the post-normalization LID/group JID. Subscribe if you want the tape. |
 
 ---
@@ -777,7 +800,7 @@ Test with a fake `Client` (wacli’s `fake_wa` pattern) for protocol tests; live
 | `subscribe` | `{topics}` | `{topics}` canonical |
 | `unsubscribe` | `{topics}` | `{topics}` remaining |
 | `directory.list` | `{query?, kind?, limit?, cursor?}` | `{items, cursor?}` |
-| `directory.get` | `{id}` | `DirectoryRow` (+ `participants`, + `icon` if `files`) |
+| `directory.get` | `{id, icon?}` | `DirectoryRow` (+ `participants`, + `icon` per §5.9) |
 | `messages.send` | `{to, text?, path?, reply?, react?}` | `{id, topic}` |
 | `messages.read` | `{to, ids, by?}` | `{topic}` |
 

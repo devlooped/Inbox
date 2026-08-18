@@ -139,11 +139,15 @@ public sealed class WhatsBoxClient : IDisposable, IAsyncDisposable
 
     /// <summary>PRODUCT.md §5.9 <c>directory.get</c>.</summary>
     public Task<DirectoryRow> GetDirectoryAsync(string id, CancellationToken cancellationToken = default)
+        => GetDirectoryAsync(id, icon: null, cancellationToken);
+
+    /// <summary>PRODUCT.md §5.9 <c>directory.get</c> with an explicit <paramref name="icon"/> fetch flag.</summary>
+    public Task<DirectoryRow> GetDirectoryAsync(string id, bool? icon, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
         return InvokeAsync(
             "directory.get",
-            new DirectoryGetParams { Id = id },
+            new DirectoryGetParams { Id = id, Icon = icon },
             JsonRpcContext.Default.JsonRpcRequestDirectoryGetParams,
             WhatsJsonContext.Default.DirectoryRow,
             cancellationToken);

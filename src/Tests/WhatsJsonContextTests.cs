@@ -50,5 +50,6 @@ public class WhatsJsonContextTests
         var back = JsonSerializer.Serialize(snap, WhatsJsonContext.Default.SessionSnapshot);
         using var doc = JsonDocument.Parse(back);
         Assert.Equal("new", doc.RootElement.GetProperty("status").GetString());
+        Assert.False(doc.RootElement.TryGetProperty("self", out _));
     }
 }

@@ -108,9 +108,7 @@ func (d *Daemon) handleMessage(ev wa.Event) {
 		"id":    ev.ID,
 		"by":    by,
 	}
-	if ev.PN != "" {
-		out["pn"] = ev.PN
-	}
+	d.decorateChat(out, chat, by, ev.Name)
 
 	switch kind {
 	case "text":
@@ -186,12 +184,14 @@ func (d *Daemon) handleReceipt(ev wa.Event) {
 	if ack == "" {
 		ack = "delivered"
 	}
-	d.emit(map[string]any{
+	out := map[string]any{
 		"topic": chat,
 		"kind":  "ack",
 		"ids":   ev.IDs,
 		"ack":   ack,
-	})
+	}
+	d.decorateChat(out, chat, "", "")
+	d.emit(out)
 }
 
 func (d *Daemon) handleMeta(ev wa.Event) {
@@ -208,9 +208,15 @@ func (d *Daemon) handleMeta(ev wa.Event) {
 		if ev.Name != "" {
 			m["name"] = ev.Name
 		}
+		by := ""
 		if ev.Sender != "" {
-			m["by"] = d.canonicalize(ev.Sender)
+			by = d.canonicalize(ev.Sender)
+			if by == d.me() {
+				by = "me"
+			}
+			m["by"] = by
 		}
+		d.decorateChat(m, chat, by, "")
 		d.emit(m)
 	}
 	// Keep directory warm even when not subscribed.
@@ -267,7 +273,7 @@ func (d *Daemon) ingestContact(c wa.Contact) {
 	if st == nil {
 		return
 	}
-	_ = st.Upsert(userRow(lid, pn, c.Name))
+	_ = st.Upsert(userRow(lid, pn, c.Name, c.Handle))
 	if row, ok := d.dirRow(lid); ok {
 		d.emitDirectoryUpsert(row)
 	}
@@ -283,6 +289,12 @@ func (d *Daemon) ingestHistory(h wa.HistorySync) {
 		}
 		d.ingestContact(wa.Contact{JID: p.JID, Name: p.Name})
 	}
+	for _, c := range h.InlineContacts {
+		d.ingestContact(c)
+	}
+	if h.SelfHandle != "" {
+		d.ingestContact(wa.Contact{JID: d.me(), LID: d.me(), Handle: h.SelfHandle})
+	}
 	st := d.store()
 	for _, c := range h.Conversations {
 		id := firstNonEmpty(c.LID, c.ID)
@@ -294,8 +306,10 @@ func (d *Daemon) ingestHistory(h wa.HistorySync) {
 			d.applyMapping(id, c.PN)
 		}
 		kind := "user"
+		handle := c.Handle
 		if topic.IsGroup(id) {
 			kind = "group"
+			handle = ""
 		}
 		var parts []dirstore.Participant
 		for _, p := range c.Participants {
@@ -303,13 +317,14 @@ func (d *Daemon) ingestHistory(h wa.HistorySync) {
 			if p.PN != "" && topic.IsLID(pt) {
 				d.applyMapping(pt, p.PN)
 			}
-			parts = append(parts, dirstore.Participant{Topic: pt, Name: p.Name, PN: p.PN, Role: p.Role})
+			parts = append(parts, dirstore.Participant{Topic: pt, Name: p.Name, Handle: p.Handle, PN: p.PN, Role: p.Role})
 		}
 		if st != nil {
 			_ = st.Upsert(dirstore.Row{
 				Topic:            id,
 				Kind:             kind,
 				Name:             c.Name,
+				Handle:           handle,
 				PN:               c.PN,
 				Archived:         c.Archived,
 				Pinned:           c.Pinned,
@@ -354,7 +369,7 @@ func (d *Daemon) populate() {
 				if p.PN != "" && topic.IsLID(pt) {
 					d.applyMapping(pt, p.PN)
 				}
-				parts = append(parts, dirstore.Participant{Topic: pt, Name: p.Name, PN: p.PN, Role: p.Role})
+				parts = append(parts, dirstore.Participant{Topic: pt, Name: p.Name, Handle: p.Handle, PN: p.PN, Role: p.Role})
 			}
 			jid := d.canonicalize(g.JID)
 			if st := d.store(); st != nil {
@@ -379,7 +394,7 @@ func (d *Daemon) populate() {
 				d.applyMapping(lid, c.PN)
 			}
 			if st := d.store(); st != nil {
-				_ = st.Upsert(userRow(lid, c.PN, c.Name))
+				_ = st.Upsert(userRow(lid, c.PN, c.Name, c.Handle))
 				if row, ok := d.dirRow(lid); ok {
 					d.emitDirectoryUpsert(row)
 					n++
@@ -388,6 +403,92 @@ func (d *Daemon) populate() {
 		}
 	}
 	d.emitDirectoryReady(n)
+}
+
+func (d *Daemon) decorateChat(out map[string]any, chat, by, pushName string) {
+	if name := d.lookupTopicName(chat); name != "" {
+		out["topicName"] = name
+	}
+	if by == "" {
+		return
+	}
+	handle, byName := d.authorIdentity(chat, by, pushName)
+	if handle != "" {
+		out["handle"] = handle
+	}
+	if byName != "" {
+		out["byName"] = byName
+	}
+}
+
+func (d *Daemon) lookupTopicName(chat string) string {
+	if row, ok := d.dirRow(chat); ok {
+		return row.Name
+	}
+	return ""
+}
+
+func (d *Daemon) authorIdentity(chat, by, pushName string) (handle, byName string) {
+	author := by
+	if by == "me" {
+		author = d.me()
+	}
+	if topic.IsGroup(chat) {
+		if p, ok := d.lookupParticipant(chat, author); ok {
+			handle = dirstore.NormalizeHandle(p.Handle)
+			if isRealDisplayName(p.Name) {
+				byName = p.Name
+			}
+		}
+	}
+	if row, ok := d.dirRow(author); ok {
+		if handle == "" {
+			handle = dirstore.NormalizeHandle(row.Handle)
+		}
+		if byName == "" {
+			byName = row.Name
+		}
+	}
+	if byName == "" && by != "me" {
+		byName = cleanPushName(pushName)
+	}
+	return handle, byName
+}
+
+func (d *Daemon) lookupParticipant(group, user string) (dirstore.Participant, bool) {
+	st := d.store()
+	if st == nil || group == "" || user == "" {
+		return dirstore.Participant{}, false
+	}
+	ps, err := st.Participants(group)
+	if err != nil {
+		return dirstore.Participant{}, false
+	}
+	for _, p := range ps {
+		if p.Topic == user {
+			return p, true
+		}
+	}
+	return dirstore.Participant{}, false
+}
+
+func isRealDisplayName(s string) bool {
+	s = strings.TrimSpace(s)
+	if s == "" || s == "-" {
+		return false
+	}
+	if strings.Contains(s, "∙") || strings.Contains(s, "•") {
+		return false
+	}
+	return true
+}
+
+func cleanPushName(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" || s == "-" {
+		return ""
+	}
+	return s
 }
 
 func firstNonEmpty(ss ...string) string {

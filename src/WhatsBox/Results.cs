@@ -12,9 +12,6 @@ public sealed record SessionSnapshot
     /// <summary>Paired account LID. Omitted when <see cref="Status"/> is <c>new</c>.</summary>
     public string? Me { get; init; }
 
-    /// <summary>Alias of <see cref="Me"/> returned by <c>initialize</c>.</summary>
-    public string? Self { get; init; }
-
     /// <summary>Protocol version, present on <c>initialize</c> (and connect-as-init).</summary>
     public string? Version { get; init; }
 }
@@ -48,6 +45,9 @@ public sealed record DirectoryRow
     /// <summary>Best display name.</summary>
     public string? Name { get; init; }
 
+    /// <summary>WhatsApp username with a leading <c>@</c>, when known. Users only.</summary>
+    public string? Handle { get; init; }
+
     /// <summary>Phone-number JID label.</summary>
     public string? Pn { get; init; }
 
@@ -78,6 +78,9 @@ public sealed record DirectoryParticipant
 
     /// <summary>Display name if known.</summary>
     public string? Name { get; init; }
+
+    /// <summary>WhatsApp username with a leading <c>@</c>, when known.</summary>
+    public string? Handle { get; init; }
 
     /// <summary>Phone-number JID label if known.</summary>
     public string? Pn { get; init; }
