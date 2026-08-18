@@ -1,6 +1,44 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <PackageId>WhatsBox</PackageId>
+    <RootNamespace>WhatsBox</RootNamespace>
+    <AssemblyName>WhatsBox</AssemblyName>
+    <NativeWhatsBoxName Condition="$([MSBuild]::IsOSPlatform('Windows'))">whatsbox.exe</NativeWhatsBoxName>
+    <NativeWhatsBoxName Condition="'$(NativeWhatsBoxName)' == ''">whatsbox</NativeWhatsBoxName>
+    <NativeWhatsBoxSourceRoot>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\..\native'))</NativeWhatsBoxSourceRoot>
+    <NativeWhatsBoxOutput>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)$(BaseIntermediateOutputPath)native\$(NativeWhatsBoxName)'))</NativeWhatsBoxOutput>
   </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="NuGetizer" Version="1.5.0">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <InternalsVisibleTo Include="Tests" />
+  </ItemGroup>
+
+  <!-- Build the current-OS whatsbox next to this project so project-reference copy lands it in the consumer outdir. -->
+  <Target Name="BuildNativeWhatsBox"
+          BeforeTargets="BeforeCompile;GetCopyToOutputDirectoryItems;AssignTargetPaths"
+          Inputs="$(NativeWhatsBoxSourceRoot)\cmd\**\*.go;$(NativeWhatsBoxSourceRoot)\internal\**\*.go;$(NativeWhatsBoxSourceRoot)\go.mod;$(NativeWhatsBoxSourceRoot)\go.sum"
+          Outputs="$(NativeWhatsBoxOutput)">
+    <MakeDir Directories="$([System.IO.Path]::GetDirectoryName($(NativeWhatsBoxOutput)))" />
+    <Exec Command="go build -o &quot;$(NativeWhatsBoxOutput)&quot; ./cmd/whatsbox"
+          WorkingDirectory="$(NativeWhatsBoxSourceRoot)"
+          EnvironmentVariables="CGO_ENABLED=0" />
+  </Target>
+
+  <Target Name="IncludeNativeWhatsBox"
+          AfterTargets="BuildNativeWhatsBox"
+          BeforeTargets="GetCopyToOutputDirectoryItems;AssignTargetPaths">
+    <ItemGroup>
+      <ContentWithTargetPath Include="$(NativeWhatsBoxOutput)" Condition="Exists('$(NativeWhatsBoxOutput)')">
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+        <TargetPath>$(NativeWhatsBoxName)</TargetPath>
+        <Visible>false</Visible>
+      </ContentWithTargetPath>
+    </ItemGroup>
+  </Target>
 </Project>
