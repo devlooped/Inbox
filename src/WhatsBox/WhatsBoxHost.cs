@@ -1,5 +1,6 @@
-using System.Diagnostics;
+using System.IO.Pipelines;
 using System.Text;
+using CliWrap;
 
 namespace WhatsBox;
 
@@ -9,15 +10,25 @@ namespace WhatsBox;
 /// </summary>
 public sealed class WhatsBoxHost : IDisposable, IAsyncDisposable
 {
-    readonly Process process;
+    static readonly UTF8Encoding Utf8NoBom = new(encoderShouldEmitUTF8Identifier: false);
+
+    readonly CommandTask<CommandResult> execution;
+    readonly CancellationTokenSource forceful;
     bool disposed;
 
-    WhatsBoxHost(Process process)
+    WhatsBoxHost(
+        CommandTask<CommandResult> execution,
+        CancellationTokenSource forceful,
+        TextWriter input,
+        TextReader output,
+        TextReader error)
     {
-        this.process = process;
-        StandardInput = process.StandardInput;
-        StandardOutput = process.StandardOutput;
-        StandardError = process.StandardError;
+        this.execution = execution;
+        this.forceful = forceful;
+        StandardInput = input;
+        StandardOutput = output;
+        StandardError = error;
+        ProcessId = execution.ProcessId;
     }
 
     /// <summary>Child stdin (JSON-RPC requests).</summary>
@@ -31,6 +42,9 @@ public sealed class WhatsBoxHost : IDisposable, IAsyncDisposable
 
     /// <summary>Absolute path of the running binary.</summary>
     public string ExecutablePath { get; private init; } = "";
+
+    /// <summary>Operating-system process id of the native child.</summary>
+    internal int ProcessId { get; }
 
     /// <summary>
     /// Resolves <c>whatsbox</c> / <c>whatsbox.exe</c> next to <paramref name="baseDirectory"/>
@@ -54,49 +68,87 @@ public sealed class WhatsBoxHost : IDisposable, IAsyncDisposable
     public static WhatsBoxHost Start(string? baseDirectory = null)
     {
         var path = ResolveBinaryPath(baseDirectory);
-        var psi = new ProcessStartInfo(path)
+        var stdin = new Pipe();
+        var stdout = new Pipe();
+        var stderr = new Pipe();
+        var forceful = new CancellationTokenSource();
+
+        var execution = Cli.Wrap(path)
+            .WithWorkingDirectory(Path.GetDirectoryName(path)!)
+            .WithValidation(CommandResultValidation.None)
+            .WithStandardInputPipe(PipeSource.FromStream(stdin.Reader.AsStream()))
+            .WithStandardOutputPipe(CopyThenComplete(stdout.Writer))
+            .WithStandardErrorPipe(CopyThenComplete(stderr.Writer))
+            .ExecuteAsync(forceful.Token);
+
+        return new WhatsBoxHost(
+            execution,
+            forceful,
+            new StreamWriter(stdin.Writer.AsStream(), Utf8NoBom) { AutoFlush = true },
+            new StreamReader(stdout.Reader.AsStream(), Encoding.UTF8),
+            new StreamReader(stderr.Reader.AsStream(), Encoding.UTF8))
         {
-            UseShellExecute = false,
-            RedirectStandardInput = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            CreateNoWindow = true,
-            StandardInputEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
-            StandardOutputEncoding = Encoding.UTF8,
-            StandardErrorEncoding = Encoding.UTF8,
-            WorkingDirectory = Path.GetDirectoryName(path)!,
+            ExecutablePath = path,
         };
-        var process = Process.Start(psi)
-            ?? throw new InvalidOperationException($"Failed to start native whatsbox at '{path}'.");
-        return new WhatsBoxHost(process) { ExecutablePath = path };
+    }
+
+    /// <summary>
+    /// Incremental copy of child stdout/stderr into a <see cref="Pipe"/> so the parent
+    /// can read NDJSON for the life of the process. Completing the writer on copy-end
+    /// (exit or cancel) yields EOF to the matching <see cref="StreamReader"/>.
+    /// </summary>
+    static PipeTarget CopyThenComplete(PipeWriter writer)
+    {
+        var copy = PipeTarget.ToStream(writer.AsStream(leaveOpen: true), autoFlush: true);
+        return PipeTarget.Create(async (origin, cancellation) =>
+        {
+            try
+            {
+                await copy.CopyFromAsync(origin, cancellation).ConfigureAwait(false);
+            }
+            finally
+            {
+                await writer.CompleteAsync().ConfigureAwait(false);
+            }
+        });
     }
 
     /// <inheritdoc />
-    public void Dispose()
+    public void Dispose() => DisposeAsync().AsTask().GetAwaiter().GetResult();
+
+    /// <inheritdoc />
+    public async ValueTask DisposeAsync()
     {
         if (disposed)
             return;
         disposed = true;
+
         try
         {
-            try { process.StandardInput.Close(); } catch { /* already closed */ }
-            if (!process.WaitForExit(2000))
-                process.Kill(entireProcessTree: true);
+            try { await StandardInput.DisposeAsync().ConfigureAwait(false); }
+            catch { /* already closed */ }
+
+            try
+            {
+                await execution.Task.WaitAsync(TimeSpan.FromSeconds(2)).ConfigureAwait(false);
+            }
+            catch (TimeoutException)
+            {
+                await forceful.CancelAsync().ConfigureAwait(false);
+                try { await execution.Task.ConfigureAwait(false); }
+                catch (OperationCanceledException) { }
+            }
         }
         catch
         {
-            try { process.Kill(entireProcessTree: true); } catch { /* gone */ }
+            try { await forceful.CancelAsync().ConfigureAwait(false); } catch { /* already canceled */ }
+            try { await execution.Task.ConfigureAwait(false); } catch { /* gone */ }
         }
         finally
         {
-            process.Dispose();
+            try { StandardOutput.Dispose(); } catch { /* closing */ }
+            try { StandardError.Dispose(); } catch { /* closing */ }
+            forceful.Dispose();
         }
-    }
-
-    /// <inheritdoc />
-    public ValueTask DisposeAsync()
-    {
-        Dispose();
-        return ValueTask.CompletedTask;
     }
 }

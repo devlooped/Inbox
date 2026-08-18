@@ -153,6 +153,33 @@ public class WhatsBoxClientTests
     }
 
     [Fact]
+    public async Task Dispose_stops_native_child()
+    {
+        var host = WhatsBoxHost.Start();
+        var pid = host.ProcessId;
+        Assert.True(pid > 0);
+        Assert.True(IsProcessRunning(pid));
+
+        await using (var client = new WhatsBoxClient(host))
+        {
+            var store = Path.Combine(Path.GetTempPath(), "whatsbox-test-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(store);
+            try
+            {
+                var snap = await client.InitializeAsync(store).WaitAsync(TimeSpan.FromSeconds(30));
+                Assert.Equal("new", snap.Status);
+            }
+            finally
+            {
+                try { Directory.Delete(store, recursive: true); } catch { /* best effort */ }
+            }
+        }
+
+        Assert.False(IsProcessRunning(pid));
+        await Assert.ThrowsAnyAsync<Exception>(() => host.StandardInput.WriteLineAsync("{}"));
+    }
+
+    [Fact]
     public async Task Initialize_fresh_store_status_new()
     {
         var store = Path.Combine(Path.GetTempPath(), "whatsbox-test-" + Guid.NewGuid().ToString("N"));
@@ -187,4 +214,17 @@ public class WhatsBoxClientTests
 
     static string RpcError(string id, int code, string token)
         => $"{{\"jsonrpc\":\"2.0\",\"id\":\"{id}\",\"error\":{{\"code\":{code},\"message\":\"{token}\"}}}}";
+
+    static bool IsProcessRunning(int processId)
+    {
+        try
+        {
+            using var process = System.Diagnostics.Process.GetProcessById(processId);
+            return !process.HasExited;
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
+    }
 }

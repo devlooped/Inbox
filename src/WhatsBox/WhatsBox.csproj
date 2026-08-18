@@ -12,6 +12,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="CliWrap" Version="3.10.4" />
     <PackageReference Include="NuGetizer" Version="1.5.0">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
@@ -20,19 +21,12 @@
   </ItemGroup>
 
   <!-- Build the current-OS whatsbox next to this project so project-reference copy lands it in the consumer outdir. -->
-  <Target Name="BuildNativeWhatsBox"
-          BeforeTargets="BeforeCompile;GetCopyToOutputDirectoryItems;AssignTargetPaths"
-          Inputs="$(NativeWhatsBoxSourceRoot)\cmd\**\*.go;$(NativeWhatsBoxSourceRoot)\internal\**\*.go;$(NativeWhatsBoxSourceRoot)\go.mod;$(NativeWhatsBoxSourceRoot)\go.sum"
-          Outputs="$(NativeWhatsBoxOutput)">
+  <Target Name="BuildNativeWhatsBox" BeforeTargets="BeforeCompile;GetCopyToOutputDirectoryItems;AssignTargetPaths" Inputs="$(NativeWhatsBoxSourceRoot)\cmd\**\*.go;$(NativeWhatsBoxSourceRoot)\internal\**\*.go;$(NativeWhatsBoxSourceRoot)\go.mod;$(NativeWhatsBoxSourceRoot)\go.sum" Outputs="$(NativeWhatsBoxOutput)">
     <MakeDir Directories="$([System.IO.Path]::GetDirectoryName($(NativeWhatsBoxOutput)))" />
-    <Exec Command="go build -o &quot;$(NativeWhatsBoxOutput)&quot; ./cmd/whatsbox"
-          WorkingDirectory="$(NativeWhatsBoxSourceRoot)"
-          EnvironmentVariables="CGO_ENABLED=0" />
+    <Exec Command="go build -o &quot;$(NativeWhatsBoxOutput)&quot; ./cmd/whatsbox" WorkingDirectory="$(NativeWhatsBoxSourceRoot)" EnvironmentVariables="CGO_ENABLED=0" />
   </Target>
 
-  <Target Name="IncludeNativeWhatsBox"
-          AfterTargets="BuildNativeWhatsBox"
-          BeforeTargets="GetCopyToOutputDirectoryItems;AssignTargetPaths">
+  <Target Name="IncludeNativeWhatsBox" AfterTargets="BuildNativeWhatsBox" BeforeTargets="GetCopyToOutputDirectoryItems;AssignTargetPaths">
     <ItemGroup>
       <ContentWithTargetPath Include="$(NativeWhatsBoxOutput)" Condition="Exists('$(NativeWhatsBoxOutput)')">
         <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
