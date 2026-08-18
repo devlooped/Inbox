@@ -1,0 +1,7 @@
+/external
+/whatsbox
+/whatsbox.exe
+*.exe
+*.test
+*.out
+
