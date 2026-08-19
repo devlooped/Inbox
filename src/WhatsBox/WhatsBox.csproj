@@ -44,6 +44,10 @@
     <PackageReference Include="CliWrap" Version="3.10.4" />
     <PackageReference Include="JsonPeek" Version="1.3.0" PrivateAssets="all" />
     <PackageReference Include="JsonPoke" Version="1.3.0" PrivateAssets="all" />
+    <PackageReference Include="Readme" Version="1.2.0">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
     <InternalsVisibleTo Include="Tests" />
   </ItemGroup>
 
@@ -65,44 +69,28 @@
     </ItemGroup>
   </Target>
 
-  <Target Name="WriteWhatsBoxRuntimeJson"
-          BeforeTargets="_GetPackageFiles;GenerateNuspec"
-          Condition="'$(RuntimeIdentifier)' == ''">
+  <Target Name="WriteWhatsBoxRuntimeJson" BeforeTargets="_GetPackageFiles;GenerateNuspec" Condition="'$(RuntimeIdentifier)' == ''">
     <PropertyGroup>
       <_WhatsBoxRuntimeJson>$([System.IO.Path]::GetFullPath('$(IntermediateOutputPath)runtime.json'))</_WhatsBoxRuntimeJson>
     </PropertyGroup>
     <ItemGroup>
       <_WhatsBoxRid Include="$(RuntimeIdentifiers)" />
     </ItemGroup>
-    <Copy
-      SourceFiles="$(MSBuildThisFileDirectory)runtime.json"
-      DestinationFiles="$(_WhatsBoxRuntimeJson)"
-      SkipUnchangedFiles="false"
-      OverwriteReadOnlyFiles="true" />
-    <JsonPoke
-      ContentPath="$(_WhatsBoxRuntimeJson)"
-      Query="$.runtimes['%(_WhatsBoxRid.Identity)'].WhatsBox['WhatsBox.%(_WhatsBoxRid.Identity)']"
-      Value="'[$(Version), )'" />
+    <Copy SourceFiles="$(MSBuildThisFileDirectory)runtime.json" DestinationFiles="$(_WhatsBoxRuntimeJson)" SkipUnchangedFiles="false" OverwriteReadOnlyFiles="true" />
+    <JsonPoke ContentPath="$(_WhatsBoxRuntimeJson)" Query="$.runtimes['%(_WhatsBoxRid.Identity)'].WhatsBox['WhatsBox.%(_WhatsBoxRid.Identity)']" Value="'[$(Version), )'" />
     <JsonPeek ContentPath="$(_WhatsBoxRuntimeJson)" Query="$.runtimes">
       <Output TaskParameter="Result" ItemName="_WhatsBoxWrittenRuntimes" />
     </JsonPeek>
-    <Error
-      Condition="'@(_WhatsBoxWrittenRuntimes)' == ''"
-      Text="runtime.json has no runtimes after writing RIDs from RuntimeIdentifiers." />
+    <Error Condition="'@(_WhatsBoxWrittenRuntimes)' == ''" Text="runtime.json has no runtimes after writing RIDs from RuntimeIdentifiers." />
     <ItemGroup>
       <None Include="$(_WhatsBoxRuntimeJson)" Pack="true" PackagePath="runtime.json" />
     </ItemGroup>
   </Target>
 
-  <Target Name="BuildWhatsBoxRidNative" Condition="'$(RuntimeIdentifier)' != ''"
-          Inputs="$(NativeWhatsBoxSourceRoot)\cmd\**\*.go;$(NativeWhatsBoxSourceRoot)\internal\**\*.go;$(NativeWhatsBoxSourceRoot)\go.mod;$(NativeWhatsBoxSourceRoot)\go.sum"
-          Outputs="$(_WhatsBoxRidNativeBinary)">
-    <Error Condition="'$(_WhatsBoxRidGoos)' == '' or '$(_WhatsBoxRidGoarch)' == ''"
-           Text="Unsupported RuntimeIdentifier '$(RuntimeIdentifier)'. Supported: $(RuntimeIdentifiers)." />
+  <Target Name="BuildWhatsBoxRidNative" Condition="'$(RuntimeIdentifier)' != ''" Inputs="$(NativeWhatsBoxSourceRoot)\cmd\**\*.go;$(NativeWhatsBoxSourceRoot)\internal\**\*.go;$(NativeWhatsBoxSourceRoot)\go.mod;$(NativeWhatsBoxSourceRoot)\go.sum" Outputs="$(_WhatsBoxRidNativeBinary)">
+    <Error Condition="'$(_WhatsBoxRidGoos)' == '' or '$(_WhatsBoxRidGoarch)' == ''" Text="Unsupported RuntimeIdentifier '$(RuntimeIdentifier)'. Supported: $(RuntimeIdentifiers)." />
     <MakeDir Directories="$(_WhatsBoxRidNativeDir)" />
-    <Exec Command="go build -o &quot;$(_WhatsBoxRidNativeBinary)&quot; ./cmd/whatsbox"
-          WorkingDirectory="$(NativeWhatsBoxSourceRoot)"
-          EnvironmentVariables="CGO_ENABLED=0;GOOS=$(_WhatsBoxRidGoos);GOARCH=$(_WhatsBoxRidGoarch)" />
+    <Exec Command="go build -o &quot;$(_WhatsBoxRidNativeBinary)&quot; ./cmd/whatsbox" WorkingDirectory="$(NativeWhatsBoxSourceRoot)" EnvironmentVariables="CGO_ENABLED=0;GOOS=$(_WhatsBoxRidGoos);GOARCH=$(_WhatsBoxRidGoarch)" />
   </Target>
 
   <Target Name="PackWhatsBoxNativeBinary" DependsOnTargets="BuildWhatsBoxRidNative" Condition="'$(RuntimeIdentifier)' != ''" Returns="@(TfmSpecificPackageFile)">
