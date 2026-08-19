@@ -68,6 +68,12 @@ jobs:
       - name: ⚙ dotnet
         uses: devlooped/actions-dotnet-env@v1
 
+      - name: ⚙ go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: native/go.mod
+          cache-dependency-path: native/go.sum
+
       - name: 🙏 build
         run: dotnet build -m:1 -bl:build.binlog
 
@@ -75,11 +81,36 @@ jobs:
         shell: pwsh
         run: dnx --yes retest -- --no-build
 
+      - name: 📦 pack rid
+        id: rid
+        shell: pwsh
+        run: |
+          $rid = switch -Wildcard ('${{ matrix.os }}') {
+            'windows-11-arm*' { 'win-arm64' }
+            'windows*'        { 'win-x64' }
+            'ubuntu-*-arm*'   { 'linux-arm64' }
+            'ubuntu*'         { 'linux-x64' }
+            'macos-*-intel*'  { 'osx-x64' }
+            'macos*'          { 'osx-arm64' }
+            default           { throw "Unsupported OS for RID pack: ${{ matrix.os }}" }
+          }
+          "rid=$rid" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          Write-Host "Packing WhatsBox.$rid"
+          dotnet pack src/WhatsBox/WhatsBox.csproj -c $env:Configuration -r $rid -bl:"pack-$rid.binlog"
+
+      - name: 📤 package
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-${{ steps.rid.outputs.rid }}
+          path: bin/*.${{ steps.rid.outputs.rid }}.*.nupkg
+          retention-days: 7
+          if-no-files-found: error
+
       - name: 🐛 logs
         uses: actions/upload-artifact@v4
         if: runner.debug && always()
         with:
-          name: logs
+          name: logs-${{ matrix.os }}
           path: '*.binlog'
 
       - name: 🚀 sleet
