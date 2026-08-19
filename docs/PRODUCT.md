@@ -226,7 +226,8 @@ Only these methods exist in v1.
   "files": "D:\\data\\wa-files",
   "subscribe": ["$directory", "123…@lid"],
   "verbosity": "info",
-  "connect": true
+  "connect": true,
+  "deviceName": "whatsbox on DESKTOP-ADA"
 }
 ```
 
@@ -238,6 +239,7 @@ Only these methods exist in v1.
 | `subscribe` | no | Initial topics; applied **before** any event is eligible for dispatch. `$session` is implicit and need not be listed. |
 | `verbosity` | no | stderr level. |
 | `connect` | no | If `true`, implicit `session.connect` after subscriptions are installed (same rules: `new` ⇒ pair). Default `false`: do not open WhatsApp. |
+| `deviceName` | no | Linked-device name shown in WhatsApp → Linked devices after pairing. Omitted or blank → `whatsbox on {hostname}`. Applied at pairing; changing it later does not rename an already-linked device. |
 
 **Store resolution**
 
@@ -791,7 +793,7 @@ Test with a fake `Client` (wacli’s `fake_wa` pattern) for protocol tests; live
 
 | Method | In | Out |
 |---|---|---|
-| `initialize` | `version`, `store?`, `files?`, `subscribe?`, `verbosity?`, `connect?` | status snapshot (`connect:true` ⇒ `session.connect`) |
+| `initialize` | `version`, `store?`, `files?`, `subscribe?`, `verbosity?`, `connect?`, `deviceName?` | status snapshot (`connect:true` ⇒ `session.connect`) |
 | `session.connect` | — | status (`new` ⇒ implicit pair) |
 | `session.pair` | — | status (no-op if already linked) |
 | `session.disconnect` | — | status |

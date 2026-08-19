@@ -143,9 +143,10 @@ await pump;
 ```
 
 `InitializeAsync(store)` is the short form: no files, no extra subscriptions,
-no connect. Pass `InitializeOptions` when you want blobs, initial topics, or
-`Connect = true` (implicit `session.connect`, and implicit QR pairing when the
-store is new).
+no connect. The linked-device name defaults to `whatsbox on {machine}`. Pass
+`InitializeOptions` when you want blobs, initial topics, a custom
+`DeviceName`, or `Connect = true` (implicit `session.connect`, and implicit
+QR pairing when the store is new).
 
 | Method | RPC | Result |
 |---|---|---|
@@ -328,7 +329,8 @@ omits it in 1:1.
   "files": "/data/wa-files",
   "subscribe": ["$directory", "123…@lid"],
   "verbosity": "info",
-  "connect": true
+  "connect": true,
+  "deviceName": "whatsbox on DESKTOP-ADA"
 }
 ```
 
@@ -340,6 +342,7 @@ omits it in 1:1.
 | `subscribe` | no | Initial topics, applied **before** any event is eligible. `$session` is implicit |
 | `verbosity` | no | stderr: `error` \| `warn` \| `info` (default) \| `debug` |
 | `connect` | no | If `true`, implicit `session.connect` after subscriptions. Default `false` |
+| `deviceName` | no | Linked-device name after pairing. Omitted or blank → `whatsbox on {hostname}` |
 
 Store resolution: `--store` or `initialize.store` is enough; both set to
 different paths → `store_mismatch`; neither → `store_required`. The

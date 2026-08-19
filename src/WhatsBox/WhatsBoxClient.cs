@@ -65,7 +65,10 @@ public sealed class WhatsBoxClient : IDisposable, IAsyncDisposable
     /// </summary>
     public IAsyncEnumerable<WhatsEvent> Events => events.Reader.ReadAllAsync();
 
-    /// <summary>PRODUCT.md §5.1 <c>initialize</c>. <paramref name="store"/> must be an absolute path.</summary>
+    /// <summary>
+    /// PRODUCT.md §5.1 <c>initialize</c>. <paramref name="store"/> must be an absolute path.
+    /// Uses <see cref="InitializeOptions.DefaultDeviceName"/> as the Linked-devices label.
+    /// </summary>
     public Task<SessionSnapshot> InitializeAsync(string store, CancellationToken cancellationToken = default)
         => InitializeAsync(new InitializeOptions { Store = store, Connect = false }, cancellationToken);
 

@@ -378,6 +378,14 @@ func TestUnsupportedVersionAndStoreRules(t *testing.T) {
 	}
 }
 
+func TestInitializeAcceptsDeviceName(t *testing.T) {
+	c := startDaemon(t, wa.NewFake(), 0)
+	res := c.mustInit(map[string]any{"connect": false, "deviceName": "Lab Box"})
+	if res["status"] != "new" {
+		t.Fatalf("status=%v", res["status"])
+	}
+}
+
 func TestStoreLocked(t *testing.T) {
 	store := t.TempDir()
 	fake1 := wa.NewFake()

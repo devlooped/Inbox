@@ -20,6 +20,15 @@ public sealed record InitializeOptions
 
     /// <summary>If <c>true</c>, implicit <c>session.connect</c> after subscriptions.</summary>
     public bool? Connect { get; init; }
+
+    /// <summary>
+    /// Linked-device name shown in WhatsApp → Linked devices after pairing.
+    /// Defaults to <c>whatsbox on {machine}</c>.
+    /// </summary>
+    public string DeviceName { get; init; } = DefaultDeviceName;
+
+    /// <summary>Default <see cref="DeviceName"/>: <c>whatsbox on {<see cref="Environment.MachineName"/>}</c>.</summary>
+    public static string DefaultDeviceName { get; } = $"whatsbox on {Environment.MachineName}";
 }
 
 /// <summary>PRODUCT.md §5.8 / §13 <c>directory.list</c> parameters.</summary>

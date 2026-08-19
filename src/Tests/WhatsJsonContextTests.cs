@@ -35,6 +35,21 @@ public class WhatsJsonContextTests
         Assert.Equal(@"D:\data\whatsbox", p.GetProperty("store").GetString());
         Assert.False(p.GetProperty("connect").GetBoolean());
         Assert.False(p.TryGetProperty("files", out _));
+        Assert.Equal(InitializeOptions.DefaultDeviceName, p.GetProperty("deviceName").GetString());
+        Assert.StartsWith("whatsbox on ", p.GetProperty("deviceName").GetString());
+    }
+
+    [Fact]
+    public void InitializeOptions_sends_custom_device_name()
+    {
+        var line = JsonRpc.Request(
+            "9",
+            "initialize",
+            new InitializeOptions { Store = @"D:\data\whatsbox", DeviceName = "Lab Box" },
+            JsonRpcContext.Default.JsonRpcRequestInitializeOptions);
+
+        using var doc = JsonDocument.Parse(line);
+        Assert.Equal("Lab Box", doc.RootElement.GetProperty("params").GetProperty("deviceName").GetString());
     }
 
     [Fact]
