@@ -1,5 +1,4 @@
 [
   "ubuntu-latest",
-  "windows-latest",
-  "macos-latest"
+  "windows-latest"
 ]

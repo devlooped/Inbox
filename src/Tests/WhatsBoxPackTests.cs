@@ -43,7 +43,12 @@ public class WhatsBoxPackTests
     {
         var repo = FindRepoRoot();
         var project = Path.Combine(repo, "src", "WhatsBox", "WhatsBox.csproj");
-        var intermediate = Path.Combine(repo, "src", "WhatsBox", "obj", "Debug", "net10.0");
+#if DEBUG
+        const string configuration = "Debug";
+#else
+        const string configuration = "Release";
+#endif
+        var intermediate = Path.Combine(repo, "src", "WhatsBox", "obj", configuration, "net10.0");
         Directory.CreateDirectory(intermediate);
 
         var start = new ProcessStartInfo("dotnet")
@@ -57,6 +62,7 @@ public class WhatsBoxPackTests
         start.ArgumentList.Add(project);
         start.ArgumentList.Add("-restore");
         start.ArgumentList.Add("-t:WriteWhatsBoxRuntimeJson");
+        start.ArgumentList.Add("-p:Configuration=" + configuration);
         start.ArgumentList.Add("-p:DesignTimeBuild=true");
         start.ArgumentList.Add("-p:GeneratePackageOnBuild=false");
         start.ArgumentList.Add("-nologo");
@@ -113,7 +119,8 @@ public class WhatsBoxPackTests
             var oses = doc.RootElement.EnumerateArray().Select(e => e.GetString()).ToArray();
             Assert.Contains("ubuntu-latest", oses);
             Assert.Contains("windows-latest", oses);
-            Assert.Contains("macos-latest", oses);
+            Assert.DoesNotContain("macos-latest", oses);
+            Assert.DoesNotContain("macos-15-intel", oses);
         }
 
         var build = File.ReadAllText(Path.Combine(repo, ".github", "workflows", "build.yml"));
