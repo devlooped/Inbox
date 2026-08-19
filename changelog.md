@@ -1,5 +1,17 @@
 # Changelog
 
+## [v0.1.2](https://github.com/devlooped/whatsbox/tree/v0.1.2) (2026-08-19)
+
+[Full Changelog](https://github.com/devlooped/whatsbox/compare/v0.1.1...v0.1.2)
+
+:sparkles: Implemented enhancements:
+
+- Allow setting the WhatsApp linked-device name on initialize [\#5](https://github.com/devlooped/whatsbox/pull/5) (@kzu)
+
+:twisted_rightwards_arrows: Merged:
+
+- Expand markdown includes in package readme [\#7](https://github.com/devlooped/whatsbox/pull/7) (@kzu)
+
 ## [v0.1.1](https://github.com/devlooped/whatsbox/tree/v0.1.1) (2026-08-19)
 
 [Full Changelog](https://github.com/devlooped/whatsbox/compare/7f2763626f62021d3a2070b22dde229fd8522363...v0.1.1)
