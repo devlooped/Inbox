@@ -487,6 +487,8 @@ stable token:
 | `invalid_params` | Missing `by`, empty `topics`, … |
 | `disconnected` | Needs `online` (send, read, live resolve) |
 
+<!-- #content -->
+
 ### v1 scope
 
 **Does:** pair via QR, connect / auto-reconnect / disconnect / logout,
@@ -499,7 +501,7 @@ last-message previews; typing or “available” presence; edit or revoke;
 pair-code or passkey pairing; channels, status, calls, blocklist or group
 admin RPCs; MCP / sockets; multi-account in one process; topic wildcards; a
 default store path.
-<!-- #content -->
+
 ---
 <!-- include https://github.com/devlooped/sponsors/raw/main/footer.md -->
 # Sponsors 
