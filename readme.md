@@ -17,6 +17,7 @@ To pay the Maintenance Fee, [become a Sponsor](https://github.com/sponsors/devlo
 OSMF tier. A single fee covers all of [Devlooped packages](https://www.nuget.org/profiles/Devlooped).
 
 <!-- https://github.com/devlooped/.github/raw/main/osmf.md -->
+---
 <!-- #content -->
 whatsbox is a local WhatsApp companion: one process owns a linked-device
 session and exposes it as a **JSON-RPC 2.0 pub/sub bus over stdio**. Clients
