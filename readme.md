@@ -1,4 +1,5 @@
-# whatsbox
+![Icon](docs/logo.png) whatsbox
+============
 
 [![Version](https://img.shields.io/nuget/vpre/WhatsBox.svg?color=royalblue)](https://www.nuget.org/packages/WhatsBox)
 [![Downloads](https://img.shields.io/nuget/dt/WhatsBox.svg?color=darkmagenta)](https://www.nuget.org/packages/WhatsBox)
