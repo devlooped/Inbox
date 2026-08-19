@@ -148,7 +148,20 @@ public class WhatsBoxPackTests
     [Fact]
     public void Current_runtime_identifier_is_a_supported_pack_rid()
     {
-        Assert.Contains(RuntimeInformation.RuntimeIdentifier, SupportedRids);
+        Assert.Contains(PortablePackRid(RuntimeInformation.RuntimeIdentifier), SupportedRids);
+    }
+
+    // Distro RIDs such as ubuntu.24.04-x64 pack as linux-x64.
+    static string PortablePackRid(string rid)
+    {
+        if (rid.StartsWith("ubuntu", StringComparison.OrdinalIgnoreCase))
+        {
+            var dash = rid.LastIndexOf('-');
+            if (dash >= 0)
+                return "linux" + rid[dash..];
+        }
+
+        return rid;
     }
 
     static string FindRepoRoot()
