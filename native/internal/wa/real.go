@@ -143,6 +143,8 @@ func (r *Real) Pair(ctx context.Context) error {
 	if r.IsPaired() && cli.IsConnected() {
 		return nil
 	}
+	// Exclusive QR path: GetQRChannel rotates the pair-device batch (60s then 20s).
+	// onEvent must not also handle *events.QR or the first code is emitted twice.
 	ch, err := cli.GetQRChannel(ctx)
 	if err != nil {
 		if r.IsPaired() {
@@ -530,10 +532,7 @@ func (r *Real) onEvent(raw any) {
 		r.handler.Emit(Event{Type: EvtPairError, Message: msg})
 	case *events.PairPasskeyRequest:
 		r.handler.Emit(Event{Type: EvtPairError, Message: "passkey required"})
-	case *events.QR:
-		if len(evt.Codes) > 0 {
-			r.handler.Emit(Event{Type: EvtQR, Code: evt.Codes[0]})
-		}
+	// *events.QR is owned by GetQRChannel in Pair — do not re-emit Codes[0] here.
 	case *events.Message:
 		r.emitMessage(evt)
 	case *events.Receipt:
