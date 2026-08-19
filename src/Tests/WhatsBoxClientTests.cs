@@ -180,6 +180,27 @@ public class WhatsBoxClientTests
     }
 
     [Fact]
+    public async Task Initialize_writes_default_device_name()
+    {
+        var stdout = new LineSource();
+        var stdin = new LineSink();
+        await using var client = new WhatsBoxClient(stdout, stdin);
+
+        var task = client.InitializeAsync(@"D:\data\whatsbox");
+        var line = await stdin.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(5));
+        using var req = JsonDocument.Parse(line);
+        Assert.Equal("initialize", req.RootElement.GetProperty("method").GetString());
+        var p = req.RootElement.GetProperty("params");
+        Assert.Equal(InitializeOptions.DefaultDeviceName, p.GetProperty("deviceName").GetString());
+        var id = req.RootElement.GetProperty("id").GetString();
+        stdout.WriteLine(RpcResult(id!));
+
+        var snap = await task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal("new", snap.Status);
+        stdout.Complete();
+    }
+
+    [Fact]
     public async Task Initialize_fresh_store_status_new()
     {
         var store = Path.Combine(Path.GetTempPath(), "whatsbox-test-" + Guid.NewGuid().ToString("N"));

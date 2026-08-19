@@ -201,12 +201,13 @@ func (d *Daemon) dispatch(ctx context.Context, req *rpc.Request) (any, *rpc.Erro
 }
 
 type initParams struct {
-	Version   string   `json:"version"`
-	Store     string   `json:"store"`
-	Files     string   `json:"files"`
-	Subscribe []string `json:"subscribe"`
-	Verbosity string   `json:"verbosity"`
-	Connect   *bool    `json:"connect"`
+	Version    string   `json:"version"`
+	Store      string   `json:"store"`
+	Files      string   `json:"files"`
+	Subscribe  []string `json:"subscribe"`
+	Verbosity  string   `json:"verbosity"`
+	Connect    *bool    `json:"connect"`
+	DeviceName string   `json:"deviceName"`
 }
 
 func (d *Daemon) initialize(ctx context.Context, raw json.RawMessage) (any, *rpc.Error) {
@@ -267,6 +268,7 @@ func (d *Daemon) initialize(ctx context.Context, raw json.RawMessage) (any, *rpc
 		}
 		return nil, rpc.ErrData(rpc.TokInvalidParams, ferr.Error())
 	}
+	wa.SetDeviceName(p.DeviceName)
 	cli, cerr := d.opts.Factory(store)
 	if cerr != nil {
 		_ = dir.Close()
