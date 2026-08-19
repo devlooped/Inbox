@@ -1,5 +1,13 @@
 # Changelog
 
+## [v0.1.3](https://github.com/devlooped/whatsbox/tree/v0.1.3) (2026-08-19)
+
+[Full Changelog](https://github.com/devlooped/whatsbox/compare/v0.1.2...v0.1.3)
+
+:bug: Fixed bugs:
+
+- Stop double-emitting the first pairing QR [\#8](https://github.com/devlooped/whatsbox/pull/8) (@kzu)
+
 ## [v0.1.2](https://github.com/devlooped/whatsbox/tree/v0.1.2) (2026-08-19)
 
 [Full Changelog](https://github.com/devlooped/whatsbox/compare/v0.1.1...v0.1.2)
