@@ -12,6 +12,7 @@ BenchmarkDotNet.Artifacts
 mcps
 /app
 /temp
+/runtimes
 .vs
 .vscode
 .genaiscript
