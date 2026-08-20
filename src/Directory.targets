@@ -1,0 +1,10 @@
+<Project>
+  <!--
+    WhatsDemo restore uses $(PackageOutputPath) (repo bin/) as a local NuGet source.
+    NuGet fails with NU1301 if that folder does not exist yet.
+  -->
+  <Target Name="EnsurePackageOutputPathExists"
+          BeforeTargets="Restore;CollectPackageReferences;_GenerateRestoreProjectSpec">
+    <MakeDir Directories="$(PackageOutputPath)" Condition="'$(PackageOutputPath)' != '' and !Exists('$(PackageOutputPath)')" />
+  </Target>
+</Project>
