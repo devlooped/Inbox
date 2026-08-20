@@ -95,8 +95,9 @@ jobs:
             default           { throw "Unsupported OS for RID pack: ${{ matrix.os }}" }
           }
           "rid=$rid" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-          Write-Host "Packing WhatsBox.$rid"
+          Write-Host "Packing WhatsBox.$rid and wd.$rid"
           dotnet pack src/WhatsBox/WhatsBox.csproj -c $env:Configuration -r $rid -bl:"pack-$rid.binlog"
+          dotnet pack src/WhatsDemo/WhatsDemo.csproj -c $env:Configuration -r $rid -bl:"pack-wd-$rid.binlog"
 
       - name: 📤 package
         uses: actions/upload-artifact@v4

@@ -1,4 +1,6 @@
 <Solution>
   <Project Path="src/Tests/Tests.csproj" />
   <Project Path="src/WhatsBox/WhatsBox.csproj" />
+  <Project Path="src/WhatsDemo/WhatsDemo.csproj" />
+  <Project Path="src/WhatsDemo.Tests/WhatsDemo.Tests.csproj" />
 </Solution>

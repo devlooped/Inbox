@@ -5,6 +5,8 @@ artifacts
 external
 pack
 agent-tools
+.tools
+.store
 terminals
 TestResults
 results

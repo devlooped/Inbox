@@ -110,6 +110,24 @@ public class WhatsBoxPackTests
     }
 
     [Fact]
+    public void Wd_tool_csproj_uses_math_pointer_and_rid_pack_split()
+    {
+        var repo = FindRepoRoot();
+        var csproj = File.ReadAllText(Path.Combine(repo, "src", "WhatsDemo", "WhatsDemo.csproj"));
+        Assert.Contains("<PackageId>wd</PackageId>", csproj);
+        Assert.Contains("<PackAsTool>true</PackAsTool>", csproj);
+        Assert.Contains("<PublishAot>true</PublishAot>", csproj);
+        Assert.Contains("<ToolCommandName>wd</ToolCommandName>", csproj);
+        Assert.Contains(
+            "<ToolPackageRuntimeIdentifiers>win-x64;win-arm64;linux-x64;linux-arm64;osx-x64;osx-arm64</ToolPackageRuntimeIdentifiers>",
+            csproj);
+        Assert.DoesNotContain("wd.$(RuntimeIdentifier)", csproj);
+        Assert.DoesNotContain("runtime.json", csproj);
+        foreach (var rid in SupportedRids)
+            Assert.Contains(rid, csproj);
+    }
+
+    [Fact]
     public void Workflows_have_os_matrix_rid_pack_and_pointer_collect()
     {
         var repo = FindRepoRoot();
@@ -126,6 +144,7 @@ public class WhatsBoxPackTests
         var build = File.ReadAllText(Path.Combine(repo, ".github", "workflows", "build.yml"));
         Assert.Contains("os-matrix.json", build);
         Assert.Contains("dotnet pack src/WhatsBox/WhatsBox.csproj", build);
+        Assert.Contains("dotnet pack src/WhatsDemo/WhatsDemo.csproj", build);
         Assert.Contains("name: package-${{ steps.rid.outputs.rid }}", build);
 
         var publish = File.ReadAllText(Path.Combine(repo, ".github", "workflows", "publish.yml"));
@@ -141,8 +160,15 @@ public class WhatsBoxPackTests
         Assert.Contains("name: package-${{ matrix.rid }}", publish);
         Assert.Contains("pattern: package-*", publish);
         Assert.Contains("dotnet pack src/WhatsBox/WhatsBox.csproj", publish);
-        Assert.DoesNotContain("PackAsTool", publish);
+        Assert.Contains("dotnet pack src/WhatsDemo/WhatsDemo.csproj", publish);
+        Assert.DoesNotContain("<PackAsTool", File.ReadAllText(Path.Combine(repo, "src", "WhatsBox", "WhatsBox.csproj")));
         Assert.Matches(new Regex(@"pointerPackages"), publish);
+
+        var demo = File.ReadAllText(Path.Combine(repo, "demo.ps1"));
+        Assert.Contains("src/WhatsDemo/WhatsDemo.csproj", demo);
+        Assert.Contains("tool', 'install', 'wd'", demo);
+        Assert.Contains("--configfile", demo);
+        Assert.Contains("src/WhatsDemo/nuget.config", demo);
     }
 
     [Fact]
