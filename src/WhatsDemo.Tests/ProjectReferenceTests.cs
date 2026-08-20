@@ -16,7 +16,9 @@ public class ProjectReferenceTests
         Assert.DoesNotContain("wd.$(RuntimeIdentifier)", xml);
         Assert.Contains("RestoreSources", xml);
         Assert.Contains("$(PackageOutputPath)", xml);
+        Assert.Contains("<RestoreIgnoreFailedSources>true</RestoreIgnoreFailedSources>", xml);
         var nuget = File.ReadAllText(Path.Combine(Path.GetDirectoryName(csproj)!, "nuget.config"));
+        Assert.Contains("ignoreFailedSources", nuget);
         Assert.Contains("packageSourceMapping", nuget);
         Assert.Contains("key=\"local\"", nuget);
         Assert.Contains("../../bin", nuget);
