@@ -53,7 +53,9 @@ jobs:
           cache-dependency-path: native/go.sum
 
       - name: 📦 pack
-        run: dotnet pack src/WhatsBox/WhatsBox.csproj -c $env:Configuration -r ${{ matrix.rid }} -bl:"pack-${{ matrix.rid }}.binlog"
+        run: |
+          dotnet pack src/WhatsBox/WhatsBox.csproj -c $env:Configuration -r ${{ matrix.rid }} -bl:"pack-${{ matrix.rid }}.binlog"
+          dotnet pack src/WhatsDemo/WhatsDemo.csproj -c $env:Configuration -r ${{ matrix.rid }} -bl:"pack-wd-${{ matrix.rid }}.binlog"
 
       - name: 📤 package
         uses: actions/upload-artifact@v4
@@ -99,13 +101,17 @@ jobs:
         run: dnx --yes retest -- --no-build
 
       - name: 📦 pointer
-        run: dotnet pack src/WhatsBox/WhatsBox.csproj -c $env:Configuration -bl:pointer-pack.binlog
+        run: |
+          dotnet pack src/WhatsBox/WhatsBox.csproj -c $env:Configuration -bl:pointer-pack.binlog
+          dotnet pack src/WhatsDemo/WhatsDemo.csproj -c $env:Configuration -bl:pointer-pack-wd.binlog
 
       - name: 📤 package
         uses: actions/upload-artifact@v4
         with:
           name: package-pointer
-          path: bin/WhatsBox.*.nupkg
+          path: |
+            bin/WhatsBox.*.nupkg
+            bin/wd.*.nupkg
           retention-days: 30
           if-no-files-found: error
 
@@ -136,7 +142,7 @@ jobs:
         if: ${{ env.NUGET_API_KEY != '' && github.event.action != 'prereleased' }}
         run: |
           $packages = @(Get-ChildItem bin -Filter *.nupkg | Where-Object Name -NotLike '*.symbols.nupkg' | Sort-Object Name)
-          $runtimePackagePattern = '^WhatsBox\.(win-x64|win-arm64|linux-x64|linux-arm64|osx-x64|osx-arm64)\..+\.nupkg$'
+          $runtimePackagePattern = '\.(win-x64|win-arm64|linux-x64|linux-arm64|osx-x64|osx-arm64)\.'
           $runtimePackages = @($packages | Where-Object Name -Match $runtimePackagePattern)
           $pointerPackages = @($packages | Where-Object Name -NotMatch $runtimePackagePattern)
 
@@ -155,7 +161,7 @@ jobs:
         if: env.SLEET_CONNECTION != ''
         run: |
           $packages = @(Get-ChildItem bin -Filter *.nupkg | Where-Object Name -NotLike '*.symbols.nupkg' | Sort-Object Name)
-          $runtimePackagePattern = '^WhatsBox\.(win-x64|win-arm64|linux-x64|linux-arm64|osx-x64|osx-arm64)\..+\.nupkg$'
+          $runtimePackagePattern = '\.(win-x64|win-arm64|linux-x64|linux-arm64|osx-x64|osx-arm64)\.'
           $runtimePackages = @($packages | Where-Object Name -Match $runtimePackagePattern)
           $pointerPackages = @($packages | Where-Object Name -NotMatch $runtimePackagePattern)
 

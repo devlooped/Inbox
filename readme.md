@@ -67,6 +67,14 @@ Do not add `WhatsBox.win-x64` (or any other RID package) by hand. Do not treat
 this as a .NET tool (`PackAsTool`); it is a `PackageReference` library plus a
 native asset.
 
+The companion REPL is a separate tool package (`wd`) with the
+same pointer + RID split:
+
+```bash
+dotnet tool install -g wd
+wd
+```
+
 Supported RIDs: `win-x64`, `win-arm64`, `linux-x64`, `linux-arm64`, `osx-x64`,
 `osx-arm64`.
 

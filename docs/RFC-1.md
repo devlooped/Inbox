@@ -4,7 +4,7 @@
 
 **Date:** 2026-08-20  
 **Affects:** protocol (`docs/PRODUCT.md`), native `whatsbox`, managed `WhatsBox` client  
-**Motivating consumer:** `src/WhatsBoxDemo`
+**Motivating consumer:** `src/WhatsDemo`
 
 ---
 
@@ -24,7 +24,7 @@ This RFC argues those fixes belong in the **protocol and both libraries**, not o
 
 v0.1 describes whatsbox as an address book plus a live pub/sub of chats the client asked for. The daemon owns the WhatsApp socket and a LID-first directory. The client owns UX: who to watch, how to label them, which message to quote.
 
-A companion REPL (`WhatsBoxDemo`) is the right stress test for that split. It must:
+A companion REPL (`WhatsDemo`) is the right stress test for that split. It must:
 
 - pair, persist a store, and restore subscriptions across restarts
 - let a human type a group subject or a phone and end up subscribed to a **canonical JID**
@@ -219,7 +219,7 @@ Demo tests cover: JID vs `directory.list` resolve and multi-hit picker; group na
 
 ## 8. Recommendation
 
-Land the protocol wording in `PRODUCT.md` (already drafted), ship native + `WhatsBox` together (sidecar and `MessageReply.Text` must not skew), and treat WhatsBoxDemo as the reference client for:
+Land the protocol wording in `PRODUCT.md` (already drafted), ship native + `WhatsBox` together (sidecar and `MessageReply.Text` must not skew), and treat WhatsDemo as the reference client for:
 
 - list-then-subscribe
 - last-message cache for `reply.text`
