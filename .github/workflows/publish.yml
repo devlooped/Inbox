@@ -54,9 +54,13 @@ jobs:
 
       - name: 📦 pack
         run: |
-          dotnet pack src/WhatsBox/WhatsBox.csproj -c $env:Configuration -bl:"pointer-pack.binlog"
-          dotnet pack src/WhatsBox/WhatsBox.csproj -c $env:Configuration -r ${{ matrix.rid }} -bl:"pack-${{ matrix.rid }}.binlog"
-          dotnet pack src/WhatsDemo/WhatsDemo.csproj -c $env:Configuration -r ${{ matrix.rid }} -bl:"pack-wd-${{ matrix.rid }}.binlog"
+          $ErrorActionPreference = 'Stop'
+          dotnet pack src/WhatsBox/WhatsBox.csproj -c $env:Configuration -p:GeneratePackageOnBuild=false -bl:"pointer-pack.binlog"
+          if ($LASTEXITCODE -ne 0) { throw "WhatsBox pointer pack failed with exit code $LASTEXITCODE." }
+          dotnet pack src/WhatsBox/WhatsBox.csproj -c $env:Configuration -r ${{ matrix.rid }} -p:GeneratePackageOnBuild=false -bl:"pack-${{ matrix.rid }}.binlog"
+          if ($LASTEXITCODE -ne 0) { throw "WhatsBox ${{ matrix.rid }} pack failed with exit code $LASTEXITCODE." }
+          dotnet pack src/WhatsDemo/WhatsDemo.csproj -c $env:Configuration -r ${{ matrix.rid }} -p:GeneratePackageOnBuild=false -bl:"pack-wd-${{ matrix.rid }}.binlog"
+          if ($LASTEXITCODE -ne 0) { throw "wd ${{ matrix.rid }} pack failed with exit code $LASTEXITCODE." }
 
       - name: 📤 package
         uses: actions/upload-artifact@v4
@@ -110,9 +114,12 @@ jobs:
             default { throw "Unsupported architecture '$_' for WhatsBox RID packages." }
           }
           $rid = "$os-$cpu"
+          $ErrorActionPreference = 'Stop'
           Write-Host "Packing WhatsBox pointer + WhatsBox.$rid into bin/ before WhatsDemo restore"
-          dotnet pack src/WhatsBox/WhatsBox.csproj -c $env:Configuration -bl:pointer-pack.binlog
-          dotnet pack src/WhatsBox/WhatsBox.csproj -c $env:Configuration -r $rid -bl:"pack-$rid.binlog"
+          dotnet pack src/WhatsBox/WhatsBox.csproj -c $env:Configuration -p:GeneratePackageOnBuild=false -bl:pointer-pack.binlog
+          if ($LASTEXITCODE -ne 0) { throw "WhatsBox pointer pack failed with exit code $LASTEXITCODE." }
+          dotnet pack src/WhatsBox/WhatsBox.csproj -c $env:Configuration -r $rid -p:GeneratePackageOnBuild=false -bl:"pack-$rid.binlog"
+          if ($LASTEXITCODE -ne 0) { throw "WhatsBox $rid pack failed with exit code $LASTEXITCODE." }
 
       - name: 🙏 build
         run: dotnet build -m:1 -bl:build.binlog
@@ -122,8 +129,11 @@ jobs:
 
       - name: 📦 pointer
         run: |
-          dotnet pack src/WhatsBox/WhatsBox.csproj -c $env:Configuration -bl:pointer-pack.binlog
-          dotnet pack src/WhatsDemo/WhatsDemo.csproj -c $env:Configuration -bl:pointer-pack-wd.binlog
+          $ErrorActionPreference = 'Stop'
+          dotnet pack src/WhatsBox/WhatsBox.csproj -c $env:Configuration -p:GeneratePackageOnBuild=false -bl:pointer-pack.binlog
+          if ($LASTEXITCODE -ne 0) { throw "WhatsBox pointer pack failed with exit code $LASTEXITCODE." }
+          dotnet pack src/WhatsDemo/WhatsDemo.csproj -c $env:Configuration -p:GeneratePackageOnBuild=false -bl:pointer-pack-wd.binlog
+          if ($LASTEXITCODE -ne 0) { throw "wd pointer pack failed with exit code $LASTEXITCODE." }
 
       - name: 📤 package
         uses: actions/upload-artifact@v4
