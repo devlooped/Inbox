@@ -48,7 +48,7 @@ public sealed record DirectoryListOptions
 }
 
 /// <summary>Quote target for <see cref="WhatsBoxClient.SendAsync"/>.</summary>
-public sealed record MessageReply(string Id, string By);
+public sealed record MessageReply(string Id, string By, string? Text = null);
 
 /// <summary>Reaction target for <see cref="WhatsBoxClient.SendAsync"/>.</summary>
 public sealed record MessageReact(string Id, string By, string Emoji);
@@ -56,7 +56,7 @@ public sealed record MessageReact(string Id, string By, string Emoji);
 /// <summary>PRODUCT.md §5.7 <c>subscribe</c> / <c>unsubscribe</c> params.</summary>
 public sealed record TopicsParams
 {
-    /// <summary>Topics to apply (input may be phone / PN / LID).</summary>
+    /// <summary>Canonical topics (LID, group JID, PN JID, or <c>$directory</c>).</summary>
     public required IReadOnlyList<string> Topics { get; init; }
 }
 

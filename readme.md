@@ -136,8 +136,10 @@ var session = await box.InitializeAsync(new InitializeOptions
 
 if (session.Status == "online")
 {
-    await box.SubscribeAsync(["+15551234567"]);
-    await box.SendAsync("+15551234567", text: "hello from whatsbox");
+    var listed = await box.ListDirectoryAsync(new DirectoryListOptions { Query = "+15551234567" });
+    var chat = listed.Items[0].Topic;
+    await box.SubscribeAsync([chat]);
+    await box.SendAsync(chat, text: "hello from whatsbox");
 }
 
 await pump;
@@ -166,9 +168,11 @@ QR pairing when the store is new).
 `SessionSnapshot.Status` is `new` (never paired), `offline` (keys on disk,
 socket down), or `online`. `Me` is the paired LID and is omitted when `new`.
 
-Addresses (`SubscribeAsync`, `SendAsync`, `ReadAsync`, `GetDirectoryAsync`)
-accept a LID, a phone-number JID, or a phone number (`+15551234567` or
-digits). Results and event topics are always **canonical** (LID or group JID).
+`SubscribeAsync` / `UnsubscribeAsync` take canonical JIDs (LID, group, or
+PN JID). Resolve names and phone numbers with `ListDirectoryAsync` first.
+`SendAsync`, `ReadAsync`, and `GetDirectoryAsync` still accept a LID, a
+phone-number JID, or a phone number (`+15551234567` or digits). Results and
+event topics are always **canonical** (LID or group JID) once a LID is known.
 
 Send text, a file under `files`, a reply, and/or a reaction:
 
@@ -298,11 +302,13 @@ with the versions the process does support.
 Phone-number JIDs (`15551234567@s.whatsapp.net`) are a **mutable label**
 (`pn`), like a display name. They are not topics once a LID is known.
 
-These fields accept LID, PN JID, or a phone number (`+15551234567` or
-digits): `subscribe` / `unsubscribe` (non-`$` topics), `messages.send.to`,
-`messages.read.to`, `directory.get` id. The process normalizes and resolves
-them. The wire result / `topic` is always canonical. Unknown phone → error
-(no ghost topic). Groups cannot be addressed by phone.
+`subscribe` / `unsubscribe` accept canonical JIDs only (LID, group, PN JID,
+or `$directory`). Names, handles, and phone numbers are resolved by the
+client via `directory.list`. `messages.send.to`, `messages.read.to`, and
+`directory.get` id still accept LID, PN JID, or a phone number
+(`+15551234567` or digits). The process normalizes those. The wire result /
+`topic` is always canonical once a LID is known. Unknown phone on
+send/read/get → error (no ghost topic). Groups cannot be addressed by phone.
 
 When a LID↔PN mapping appears later, the process upserts `$directory`, moves
 any PN subscription to the LID, and emits `$session` `{kind:"remap", from, to}`.

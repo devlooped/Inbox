@@ -71,7 +71,9 @@ func (d *Daemon) handleMessage(ev wa.Event) {
 		d.applyMapping(chat, ev.PN)
 		chat = d.canonicalize(chat)
 	}
-	if ev.Sender != "" && ev.PN != "" && topic.IsLID(d.canonicalize(ev.Sender)) {
+	// On from-me 1:1 sends, PN is the recipient (RecipientAlt), not the sender.
+	// Mapping sender→PN would steal the peer's phone onto our LID.
+	if !ev.FromMe && ev.Sender != "" && ev.PN != "" && topic.IsLID(d.canonicalize(ev.Sender)) {
 		d.applyMapping(d.canonicalize(ev.Sender), ev.PN)
 	}
 
@@ -242,7 +244,17 @@ func (d *Daemon) touchDirectoryFromMessage(ev wa.Event, chat string) {
 	if topic.IsGroup(chat) {
 		kind = "group"
 	}
-	row := dirstore.Row{Topic: chat, Kind: kind, Name: ev.Name, PN: ev.PN}
+	// PushName is the sender's. Never paint it onto a group (that replaces
+	// the subject with the last author) or onto the 1:1 peer on from-me.
+	name := ev.Name
+	pn := ev.PN
+	if kind == "group" || (ev.FromMe && kind == "user") {
+		name = ""
+		if kind == "group" {
+			pn = ""
+		}
+	}
+	row := dirstore.Row{Topic: chat, Kind: kind, Name: name, PN: pn}
 	if existing, ok, _ := st.Get(chat); ok {
 		if row.Name == "" {
 			row.Name = existing.Name
@@ -253,6 +265,9 @@ func (d *Daemon) touchDirectoryFromMessage(ev wa.Event, chat string) {
 		row.Muted = existing.Muted
 		row.Pinned = existing.Pinned
 		row.Archived = existing.Archived
+		if kind == "group" {
+			row.Handle = existing.Handle
+		}
 	}
 	_ = st.Upsert(row)
 }

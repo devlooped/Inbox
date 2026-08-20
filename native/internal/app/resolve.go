@@ -12,9 +12,6 @@ import (
 func (d *Daemon) resolveTopic(ctx context.Context, raw string, allowSystem bool) (string, *rpc.Error) {
 	p, err := topic.Parse(raw)
 	if err != nil {
-		if strings.HasPrefix(strings.TrimSpace(raw), "$") {
-			return "", rpc.ErrData(rpc.TokInvalidTopic, raw)
-		}
 		return "", rpc.ErrData(rpc.TokInvalidTopic, raw)
 	}
 	switch p.Kind {
@@ -51,6 +48,33 @@ func (d *Daemon) resolveTopic(ctx context.Context, raw string, allowSystem bool)
 			return "", rpc.ErrData(rpc.TokNotFound, raw)
 		}
 		return "", rpc.ErrData(rpc.TokNotFound, raw)
+	default:
+		return "", rpc.ErrData(rpc.TokInvalidTopic, raw)
+	}
+}
+
+// resolveSubscribeTopic accepts only canonical chat JIDs (LID, group) and
+// system topics. Names, handles, and phone numbers are the client's job via
+// directory.list. A PN JID is kept as a temporary topic until a LID mapping
+// exists (then remap).
+func (d *Daemon) resolveSubscribeTopic(raw string, allowSystem bool) (string, *rpc.Error) {
+	p, err := topic.Parse(raw)
+	if err != nil {
+		return "", rpc.ErrData(rpc.TokInvalidTopic, raw)
+	}
+	switch p.Kind {
+	case topic.KindSystem:
+		if !allowSystem {
+			return "", rpc.ErrData(rpc.TokInvalidTopic, raw)
+		}
+		return p.Canonical, nil
+	case topic.KindGroup, topic.KindLID:
+		return p.Canonical, nil
+	case topic.KindPN:
+		if lid, ok := d.lookupLID(p.Canonical, p.Phone); ok {
+			return lid, nil
+		}
+		return p.Canonical, nil
 	default:
 		return "", rpc.ErrData(rpc.TokInvalidTopic, raw)
 	}
@@ -109,8 +133,8 @@ func (d *Daemon) usync(ctx context.Context, phone string) (string, *rpc.Error) {
 			// usync returned only a PN; do not invent a LID.
 			continue
 		}
-		if st := d.store(); st != nil && topic.IsLID(lid) {
-			_ = st.PutMapping(lid, pn)
+		if topic.IsLID(lid) {
+			d.applyMapping(lid, pn)
 		}
 		if topic.IsLID(lid) {
 			return lid, nil

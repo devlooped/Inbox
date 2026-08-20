@@ -26,14 +26,14 @@ func (d *Daemon) subscribe(ctx context.Context, raw json.RawMessage) (any, *rpc.
 	return d.applySubscribe(ctx, p.Topics, true)
 }
 
-func (d *Daemon) applySubscribe(ctx context.Context, topics []string, requireParams bool) (any, *rpc.Error) {
+func (d *Daemon) applySubscribe(_ context.Context, topics []string, requireParams bool) (any, *rpc.Error) {
 	if requireParams && len(topics) == 0 {
 		return nil, rpc.ErrData(rpc.TokInvalidParams, "topics is required")
 	}
 	resolved := make([]string, 0, len(topics))
 	seen := map[string]struct{}{}
 	for _, t := range topics {
-		canon, err := d.resolveTopic(ctx, t, true)
+		canon, err := d.resolveSubscribeTopic(t, true)
 		if err != nil {
 			return nil, err
 		}
@@ -60,7 +60,7 @@ func (d *Daemon) unsubscribe(raw json.RawMessage) (any, *rpc.Error) {
 		if strings.TrimSpace(t) == topic.Session {
 			return nil, rpc.ErrData(rpc.TokInvalidTopic, topic.Session)
 		}
-		c, err := d.resolveTopic(context.Background(), t, true)
+		c, err := d.resolveSubscribeTopic(t, true)
 		if err != nil {
 			return nil, err
 		}
@@ -284,8 +284,9 @@ type sendParams struct {
 	Text  string `json:"text"`
 	Path  string `json:"path"`
 	Reply *struct {
-		ID string `json:"id"`
-		By string `json:"by"`
+		ID   string `json:"id"`
+		By   string `json:"by"`
+		Text string `json:"text"`
 	} `json:"reply"`
 	React *struct {
 		ID    string `json:"id"`
@@ -349,26 +350,31 @@ func (d *Daemon) messagesSend(ctx context.Context, raw json.RawMessage) (any, *r
 		}
 		kind := files.KindForPath(abs)
 		id, sendErr = cli.SendMedia(ctx, wa.SendMedia{
-			To:       canon,
-			Path:     p.Path,
-			Data:     data,
-			MIME:     files.MIMEForPath(abs),
-			FileName: filepath.Base(abs),
-			Caption:  p.Text,
-			Kind:     kind,
-			ReplyID:  replyID(p),
-			ReplyBy:  replyBy(d, p),
+			To:        canon,
+			Path:      p.Path,
+			Data:      data,
+			MIME:      files.MIMEForPath(abs),
+			FileName:  filepath.Base(abs),
+			Caption:   p.Text,
+			Kind:      kind,
+			ReplyID:   replyID(p),
+			ReplyBy:   replyBy(d, p),
+			ReplyText: replyText(p),
 		})
 		evKind = kind
 		evText = p.Text
 		evPath = p.Path
 	} else {
 		id, sendErr = cli.SendText(ctx, wa.SendText{
-			To:      canon,
-			Text:    p.Text,
-			ReplyID: replyID(p),
-			ReplyBy: replyBy(d, p),
+			To:        canon,
+			Text:      p.Text,
+			ReplyID:   replyID(p),
+			ReplyBy:   replyBy(d, p),
+			ReplyText: replyText(p),
 		})
+		if p.Reply != nil {
+			d.logf("debug", "send reply to=%s id=%s by=%s text=%q", canon, replyID(p), replyBy(d, p), replyText(p))
+		}
 		evKind = "text"
 		evText = p.Text
 	}
@@ -409,8 +415,21 @@ func replyID(p sendParams) string {
 }
 
 func replyBy(d *Daemon, p sendParams) string {
+	if p.Reply == nil {
+		return ""
+	}
+	by := d.normalizeBy(p.Reply.By)
+	if by == "me" {
+		if me := d.me(); me != "" {
+			return me
+		}
+	}
+	return by
+}
+
+func replyText(p sendParams) string {
 	if p.Reply != nil {
-		return d.normalizeBy(p.Reply.By)
+		return p.Reply.Text
 	}
 	return ""
 }
