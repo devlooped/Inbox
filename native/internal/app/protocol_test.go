@@ -528,15 +528,9 @@ func TestSubscribeNormalizeAndAtomic(t *testing.T) {
 	fake.SetPaired("111@lid")
 	c := startDaemon(t, fake, 0)
 	_ = c.mustInit(map[string]any{"connect": true})
-	fake.SetPhone(wa.PhoneInfo{
-		Query: "15551234567",
-		IsIn:  true,
-		JID:   "999@lid",
-		PN:    "15551234567@s.whatsapp.net",
-	})
 
 	res := c.mustCall("subscribe", map[string]any{
-		"topics": []string{"+15551234567", "12036342@g.us"},
+		"topics": []string{"999@lid", "12036342@g.us"},
 	})
 	topics := asStrings(res["topics"])
 	if !contains(topics, "999@lid") || !contains(topics, "12036342@g.us") {
@@ -553,11 +547,17 @@ func TestSubscribeNormalizeAndAtomic(t *testing.T) {
 		t.Fatalf("want invalid_topic on unsub $session, got %#v", err)
 	}
 
-	// unknown phone errors and creates no topic
+	for _, bad := range []string{"+15551234567", "Nosotros", "@ada"} {
+		_, err = c.call("subscribe", map[string]any{"topics": []string{bad}})
+		if err == nil || err.Message != rpc.TokInvalidTopic {
+			t.Fatalf("want invalid_topic for %q, got %#v", bad, err)
+		}
+	}
+
 	before := c.mustCall("session.status", nil)
-	_, err = c.call("subscribe", map[string]any{"topics": []string{"+19990001111", "999@lid"}})
-	if err == nil {
-		t.Fatal("expected unknown phone to fail whole subscribe")
+	_, err = c.call("subscribe", map[string]any{"topics": []string{"+19990001111", "888@lid"}})
+	if err == nil || err.Message != rpc.TokInvalidTopic {
+		t.Fatalf("want invalid_topic for phone in batch, got %#v", err)
 	}
 	after := c.mustCall("session.status", nil)
 	if fmt.Sprint(before["topics"]) != fmt.Sprint(after["topics"]) {
@@ -696,6 +696,20 @@ func TestEventIdentityFields(t *testing.T) {
 	if gt["topicName"] != "Team" {
 		t.Fatalf("group topicName=%v", gt["topicName"])
 	}
+	fake.Inject(wa.Event{
+		Type: wa.EvtMessage, Chat: "12036342@g.us", ID: "g2", Sender: "888@lid",
+		Kind: "text", Text: "from bob", Name: "Bob",
+	})
+	g2 := c.waitEventWhere(time.Second, func(ev map[string]any) bool {
+		return ev["kind"] == "text" && ev["id"] == "g2"
+	})
+	if g2["topicName"] != "Team" {
+		t.Fatalf("group subject must not become the sender push name: %v", g2)
+	}
+	team := c.mustCall("directory.get", map[string]any{"id": "12036342@g.us"})
+	if team["name"] != "Team" {
+		t.Fatalf("directory group name after inbound=%v", team)
+	}
 	if gt["byName"] != "Ada" {
 		t.Fatalf("group byName should be contact name, not redacted DisplayName: %v", gt)
 	}
@@ -718,6 +732,22 @@ func TestEventIdentityFields(t *testing.T) {
 	}
 	if mine["topicName"] != "Ada" {
 		t.Fatalf("from-me topicName=%v", mine["topicName"])
+	}
+
+	fake.Inject(wa.Event{
+		Type: wa.EvtMessage, Chat: "999@lid", ID: "m2", Sender: "111@lid",
+		FromMe: true, Kind: "text", Text: "yo", Name: "MeName", PN: "15551234567@s.whatsapp.net",
+	})
+	_ = c.waitEventWhere(time.Second, func(ev map[string]any) bool {
+		return ev["kind"] == "text" && ev["id"] == "m2"
+	})
+	ada := c.mustCall("directory.get", map[string]any{"id": "999@lid"})
+	if ada["name"] != "Ada" {
+		t.Fatalf("from-me must not rename the peer: %v", ada)
+	}
+	self := c.mustCall("directory.get", map[string]any{"id": "111@lid"})
+	if pn, _ := self["pn"].(string); strings.Contains(pn, "15551234567") {
+		t.Fatalf("from-me must not map self LID to the peer phone: %v", self)
 	}
 
 	fake.Inject(wa.Event{
@@ -885,6 +915,48 @@ func TestChatEventsDiscardOverflowSendRead(t *testing.T) {
 	_, err := c.call("messages.send", map[string]any{"to": "999@lid", "reply": map[string]any{"id": "t1"}})
 	if err == nil || err.Message != rpc.TokInvalidParams {
 		t.Fatalf("reply missing by: %#v", err)
+	}
+	quoted := c.mustCall("messages.send", map[string]any{
+		"to": "999@lid", "text": "obvio que anda",
+		"reply": map[string]any{"id": "3EB0", "by": "me", "text": "anda?"},
+	})
+	if quoted["id"] == "" {
+		t.Fatalf("quoted send=%v", quoted)
+	}
+	foundQuote := false
+	for _, s := range fake.Sent {
+		st, ok := s.(wa.SendText)
+		if !ok || st.ReplyID != "3EB0" {
+			continue
+		}
+		foundQuote = true
+		if st.ReplyBy != "111@lid" || st.ReplyText != "anda?" {
+			t.Fatalf("reply fields by=%q text=%q", st.ReplyBy, st.ReplyText)
+		}
+	}
+	if !foundQuote {
+		t.Fatal("expected SendText with reply stub")
+	}
+	groupQuote := c.mustCall("messages.send", map[string]any{
+		"to": "12036342@g.us", "text": "quoted in group",
+		"reply": map[string]any{"id": "g1", "by": "me", "text": "hello"},
+	})
+	if groupQuote["id"] == "" {
+		t.Fatalf("group quoted send=%v", groupQuote)
+	}
+	foundGroup := false
+	for _, s := range fake.Sent {
+		st, ok := s.(wa.SendText)
+		if !ok || st.ReplyID != "g1" {
+			continue
+		}
+		foundGroup = true
+		if st.ReplyBy != "111@lid" || st.ReplyText != "hello" {
+			t.Fatalf("group reply by=%q want 111@lid text=%q", st.ReplyBy, st.ReplyText)
+		}
+	}
+	if !foundGroup {
+		t.Fatal("expected group SendText with me resolved to LID")
 	}
 	_, err = c.call("messages.send", map[string]any{"to": "999@lid"})
 	if err == nil || err.Message != rpc.TokInvalidParams {

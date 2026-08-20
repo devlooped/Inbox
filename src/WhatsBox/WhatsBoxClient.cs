@@ -320,6 +320,7 @@ public sealed class WhatsBoxClient : IDisposable, IAsyncDisposable
                     if (line is null)
                         break;
                     Debug.WriteLine(line);
+                    Console.Error.WriteLine(line);
                 }
             }
             catch (OperationCanceledException) { }

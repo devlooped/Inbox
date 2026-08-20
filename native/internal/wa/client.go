@@ -170,22 +170,24 @@ type ProfileIcon struct {
 }
 
 type SendText struct {
-	To      string
-	Text    string
-	ReplyID string
-	ReplyBy string
+	To        string
+	Text      string
+	ReplyID   string
+	ReplyBy   string
+	ReplyText string
 }
 
 type SendMedia struct {
-	To       string
-	Path     string
-	Data     []byte
-	MIME     string
-	FileName string
-	Caption  string
-	ReplyID  string
-	ReplyBy  string
-	Kind     string
+	To        string
+	Path      string
+	Data      []byte
+	MIME      string
+	FileName  string
+	Caption   string
+	ReplyID   string
+	ReplyBy   string
+	ReplyText string
+	Kind      string
 }
 
 type SendReact struct {

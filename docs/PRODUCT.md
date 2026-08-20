@@ -171,17 +171,18 @@ If the daemon does not support it, return an error with the versions it does sup
 
 ### 4.2 Input acceptance
 
+`subscribe` / `unsubscribe` (and `initialize.subscribe`) accept **canonical JIDs only**: LID, group JID (`@g.us`), PN JID (`@s.whatsapp.net`), or `$directory`. Names, handles, and phone numbers are **not** resolved here — the client looks those up with `directory.list` and passes the row’s `topic`. An unmapped PN JID is kept as a temporary topic until a LID mapping arrives (`remap`).
+
 These fields accept **LID, PN JID, or a phone number** (`+15551234567` or digits):
 
-- `subscribe` / `unsubscribe` topic entries that are not `$directory`
 - `messages.send.to`
 - `messages.read.to`
 - `directory.get` id
 
 The daemon **normalizes** phones and resolves through (in order): local LID map, then WhatsApp `IsOnWhatsApp` when a live connection exists.
 
-- Result / `topic` on the wire is always **canonical** (LID or group JID).
-- Unknown phone → error. **Do not** create a ghost topic.
+- Result / `topic` on the wire is always **canonical** (LID or group JID) once a LID is known.
+- Unknown phone on send/read/get → error. **Do not** create a ghost topic.
 - Groups cannot be addressed by phone.
 
 ### 4.3 Remap
@@ -202,12 +203,12 @@ When a LID↔PN mapping appears later (HistorySync, group participants, usync):
 | a JID | That user (normalized to LID when known). |
 | the string `"me"` | The paired account’s LID. |
 
-- **Reply and react:** `by` is **required** (1:1 and groups). Clients copy it from the inbound event. Use `"me"` when targeting their own message.
+- **Reply and react:** `by` is **required** (1:1 and groups). Clients copy it from the inbound event. Use `"me"` when targeting their own message. The daemon **normalizes** `"me"` to the paired LID before WhatsApp `ContextInfo.participant` / reaction keys.
 - **`messages.read`:** `by` is **required for groups** (and all `ids` in that call must share that author — whatsmeow `MarkRead` constraint). **Omit in 1:1.**
 - **Inbound events:** `by` is `"me"` or a LID. There is no separate `self` field.
 - **Status snapshot:** the paired LID is `me` only. Do not also emit `self`.
 
-Why `id` alone is not enough is specified in §11 (trade-offs) and follows WhatsApp’s key `(chat, id, fromMe, participant)`.
+Why `id` alone is not enough is specified in §11 (trade-offs) and follows WhatsApp’s key `(chat, id, fromMe, participant)`. WhatsApp does **not** resolve quoted bodies server-side; see §5.10 `reply.text`.
 
 ---
 
@@ -320,17 +321,18 @@ See §2.4. Result is `session.status` with `status: "new"`.
 ### 5.7 `subscribe` / `unsubscribe`
 
 ```json
-{"topics":["$directory","+15551234567","120363…@g.us"]}
+{"topics":["$directory","123…@lid","120363…@g.us"]}
 ```
 
 **Result**
 
 ```json
-{"topics":["$directory","999@lid","120363…@g.us"]}
+{"topics":["$directory","123…@lid","120363…@g.us"]}
 ```
 
-- Result lists **canonical** topics actually applied (resolved).
+- Result lists **canonical** topics actually applied (PN JID → LID when mapped).
 - Display name / `pn` / roster are **not** on this result. Call `directory.get` with the canonical topic if needed.
+- Names, handles, and phone numbers are `invalid_topic`. Resolve them with `directory.list` and pass the row’s `topic`.
 - Unknown / unresolvable entries fail the whole call with `error` naming the bad topic (no partial apply).
 - `$session` cannot be unsubscribed.
 - Subscribing an already-subscribed topic is a no-op.
@@ -385,7 +387,7 @@ Missing entity → error `not_found`.
   "to": "+15551234567",
   "text": "hello",
   "path": "out/photo.jpg",
-  "reply": {"id": "3EB0…", "by": "999@lid"},
+  "reply": {"id": "3EB0…", "by": "999@lid", "text": "original body"},
   "react": {"id": "3EB0…", "by": "me", "emoji": "👍"}
 }
 ```
@@ -395,7 +397,7 @@ Missing entity → error `not_found`.
 | `to` | Chat (LID / PN / phone / group JID). Required. |
 | `text` | Body. Optional if `path` or `react` is set. |
 | `path` | Relative path under `files`. Requires `files`. Optional. |
-| `reply` | Quote. `id` + `by` required. |
+| `reply` | Quote. `id` + `by` required. Optional `text` is the quoted body (`ContextInfo.quotedMessage`). Without it, clients that do not have the original message show no quote bubble. |
 | `react` | Reaction. `id` + `by` required. `emoji` empty string = remove reaction. May be sent with no `text`/`path`. |
 
 Rules:
@@ -405,6 +407,7 @@ Rules:
 - `path` must resolve under `files` (no `..` escape).
 - **Result:** `{id, topic}` where `topic` is the **canonical** chat JID after normalization. No timestamp.
 - If the client is subscribed to that topic, a normal inbound-shaped `event` is also emitted with `by: "me"`. If not subscribed, the RPC result is the only acknowledgement.
+- **Reply `ContextInfo`:** `stanzaID` = `reply.id`; `participant` = author JID (`"me"` → paired LID) in **1:1 and groups**; `quotedMessage.conversation` = `reply.text` when provided (always attach the stub, even if empty). **Do not** set `remoteJid` on a same-chat quote — WhatsApp then renders `Group • {name}` instead of the bubble.
 
 ### 5.11 `messages.read`
 
@@ -575,6 +578,12 @@ There is **no** WhatsApp-side contact/chat search. `directory.list` is local SQL
 
 Keep the directory warm from live events (new group, push name, contact app-state) even when the chat is not subscribed — that is how a client discovers a JID to subscribe to. Still **no message bodies**.
 
+Live-message upserts must not corrupt identity:
+
+- **PushName is the sender’s.** Never write it onto a **group** row (that replaces the subject with the last author) or onto the 1:1 peer on a from-me event.
+- **From-me 1:1:** `RecipientAlt` / event `pn` is the **peer**, not the sender. Do not map sender LID → that `pn` (it steals the peer’s phone onto `me`).
+- Group rows keep existing `name` / `handle` / `pn` unless a real group source updates them (`GetJoinedGroups`, rename `meta`).
+
 ---
 
 ## 8. Files
@@ -648,7 +657,7 @@ JSON-RPC application errors use codes in the `-32000`…`-32099` range (or a sta
 | `not_paired` | Action needs keys (should be rare; `connect` pairs) |
 | `pair_error` | QR pairing failed / passkey required |
 | `not_found` | directory.get / unknown topic resolution |
-| `invalid_topic` | `$` reserved, bad JID, unsubscribe `$session` |
+| `invalid_topic` | `$` reserved, bad JID, phone/name on subscribe, unsubscribe `$session` |
 | `files_required` | Blob op without `files` |
 | `path_escape` | `path` outside `files` |
 | `invalid_params` | Missing `by` on group read / reply / react, etc. |
@@ -674,7 +683,10 @@ Decisions from the design session, with the alternative we rejected.
 | No default store | `~/.whatsbox` | Client (or `--store`) must choose. Avoids hidden state. |
 | `--store` **or** `initialize.store` | Flag-only or init-only | Either is enough; conflict fails loud. |
 | LID as topic / directory PK; PN is a label | Canonical phone JID | Agents will see LIDs. PN can change or be missing. `remap` is cheaper than dual topics forever. |
-| Accept phone / PN / LID on input | JID-only | Agents will pass numbers. `IsOnWhatsApp` + lid map resolve. No ghost topics. |
+| `subscribe` / `unsubscribe` canonical JIDs only | Phone / name / handle on subscribe | Directory search is `directory.list`. Subscribe is a JID set. Ambiguous names need a client picker, not daemon `invalid_topic`. |
+| Phone / PN / LID on send, read, `directory.get` | Phones nowhere | Send-to-number without a directory row remains useful. `IsOnWhatsApp` + lid map. No ghost topics. |
+| Optional `reply.text`; daemon never looks up quote bodies | Infer quote from store | v1 stores no message text. WhatsApp does not resolve quotes server-side. The client that displayed the line must pass the stub. |
+| No `remoteJid` on same-chat quotes; `participant` is the author LID | Set `remoteJid` to the chat; omit participant in 1:1 | `remoteJid` means “quoted from another chat” (`Group • {name}`). `"me"` is not a JID; phones ignore the bubble. |
 | `$` system topics, bare JIDs, no `chats/` prefix | `chats/{jid}/ack` subtopics | MQTT-shaped. After `$session`/`$directory`, everything else is a chat. |
 | Fold ack + meta into the chat topic | Separate `/ack` `/meta` subscriptions | Volume is low (no typing). Client discards `kind`. |
 | Split directory vs chat meta by **list-row vs room notice** | Dual-publish every member join, or meta-only-on-directory | Catalog stays small. One-group bots are not flooded. Rename/icon/you-were-added are both a list fact and a room event. |
@@ -714,7 +726,7 @@ Facts gathered from whatsmeow and wacli that an implementer should not rediscove
 - `SendMessage(ctx, to, *waE2E.Message)`.
 - `BuildReaction(chat, sender, id, emoji)` and `BuildMessageKey(chat, sender, id)`: `sender` is the **original author**. Empty/`own` ⇒ `FromMe=true`. In groups, non-self author sets `MessageKey.Participant`.
 - Empty reaction text removes the reaction (whatsmeow / WhatsApp convention).
-- Reply is a `ContextInfo` on the outgoing proto (`stanzaId` + `participant` in groups + quoted stub). wacli uses `--reply-to` + `--reply-to-sender` for the same reason as `by`.
+- Reply is a `ContextInfo` on `ExtendedTextMessage` (or media): `stanzaID`, `participant` (quoted author JID in **1:1 and groups**; resolve `"me"` to the paired LID), `quotedMessage` stub. **Do not** set `remoteJid` unless quoting a *different* chat. whatsmeow has no `Reply()` helper. wacli uses `--reply-to` + `--reply-to-sender` for the same reason as `by`.
 - `RevokeMessage` / `BuildRevoke` is “delete for everyone.” Explicitly out of v1.
 - Newsletter reactions use `NewsletterSendReaction`, not `BuildReaction`. Channels are out of v1.
 
@@ -775,7 +787,7 @@ Facts gathered from whatsmeow and wacli that an implementer should not rediscove
 3. Directory DB + populate (app-state + groups + HistorySync headers) + `$directory` + list/get.
 4. LID-first resolution + `remap` + subscribe match.
 5. Chat `event`s (text/unknown/ack/meta) + discard policy + overflow.
-6. `messages.send` text + reply/react (`by` / `me`).
+6. `messages.send` text + reply/react (`by` / `me` / optional `reply.text` stub).
 7. `files` + inbound download + send path + `directory.get` icon.
 8. `messages.read` + logout wipe.
 

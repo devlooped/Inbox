@@ -270,7 +270,7 @@ func (r *Real) SendText(ctx context.Context, req SendText) (string, error) {
 		msg.Conversation = nil
 		msg.ExtendedTextMessage = &waE2E.ExtendedTextMessage{
 			Text:        proto.String(req.Text),
-			ContextInfo: replyContext(req.To, req.ReplyID, req.ReplyBy),
+			ContextInfo: replyContext(req.To, req.ReplyID, req.ReplyBy, req.ReplyText),
 		}
 	}
 	return r.send(ctx, to, msg)
@@ -302,7 +302,7 @@ func (r *Real) SendMedia(ctx context.Context, req SendMedia) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	ctxInfo := replyContext(req.To, req.ReplyID, req.ReplyBy)
+	ctxInfo := replyContext(req.To, req.ReplyID, req.ReplyBy, req.ReplyText)
 	var msg *waE2E.Message
 	switch req.Kind {
 	case "video":
@@ -772,17 +772,18 @@ func (r *Real) emitGroupInfo(evt *events.GroupInfo) {
 	}
 }
 
-func replyContext(chat, id, by string) *waE2E.ContextInfo {
+func replyContext(chat, id, by, text string) *waE2E.ContextInfo {
 	if id == "" {
 		return nil
 	}
 	ci := &waE2E.ContextInfo{StanzaID: proto.String(id)}
+	// Participant is the quoted author (1:1 and groups). Omit only when the
+	// caller left by as "me" unresolved. Never set RemoteJID on a same-chat
+	// quote — WhatsApp then renders "Group • {name}".
 	if by != "" && by != "me" {
 		ci.Participant = proto.String(by)
 	}
-	if chat != "" {
-		ci.RemoteJID = proto.String(chat)
-	}
+	ci.QuotedMessage = &waE2E.Message{Conversation: proto.String(text)}
 	return ci
 }
 
