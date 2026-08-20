@@ -88,9 +88,13 @@ jobs:
             default           { throw "Unsupported OS for RID pack: ${{ matrix.os }}" }
           }
           "rid=$rid" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          $ErrorActionPreference = 'Stop'
           Write-Host "Packing WhatsBox pointer + WhatsBox.$rid into bin/ before WhatsDemo restore"
-          dotnet pack src/WhatsBox/WhatsBox.csproj -c $env:Configuration -bl:pointer-pack.binlog
-          dotnet pack src/WhatsBox/WhatsBox.csproj -c $env:Configuration -r $rid -bl:"pack-$rid.binlog"
+          # GeneratePackageOnBuild=true makes `dotnet pack` skip Build (NU5026: WhatsBox.dll missing).
+          dotnet pack src/WhatsBox/WhatsBox.csproj -c $env:Configuration -p:GeneratePackageOnBuild=false -bl:pointer-pack.binlog
+          if ($LASTEXITCODE -ne 0) { throw "WhatsBox pointer pack failed with exit code $LASTEXITCODE." }
+          dotnet pack src/WhatsBox/WhatsBox.csproj -c $env:Configuration -r $rid -p:GeneratePackageOnBuild=false -bl:"pack-$rid.binlog"
+          if ($LASTEXITCODE -ne 0) { throw "WhatsBox $rid pack failed with exit code $LASTEXITCODE." }
 
       - name: 🙏 build
         run: dotnet build -m:1 -bl:build.binlog
@@ -102,9 +106,11 @@ jobs:
       - name: 📦 pack wd
         shell: pwsh
         run: |
+          $ErrorActionPreference = 'Stop'
           $rid = '${{ steps.rid.outputs.rid }}'
           Write-Host "Packing wd.$rid"
-          dotnet pack src/WhatsDemo/WhatsDemo.csproj -c $env:Configuration -r $rid -bl:"pack-wd-$rid.binlog"
+          dotnet pack src/WhatsDemo/WhatsDemo.csproj -c $env:Configuration -r $rid -p:GeneratePackageOnBuild=false -bl:"pack-wd-$rid.binlog"
+          if ($LASTEXITCODE -ne 0) { throw "wd $rid pack failed with exit code $LASTEXITCODE." }
 
       - name: 📤 package
         uses: actions/upload-artifact@v4
