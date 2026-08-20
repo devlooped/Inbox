@@ -74,13 +74,6 @@ jobs:
           go-version-file: native/go.mod
           cache-dependency-path: native/go.sum
 
-      - name: 🙏 build
-        run: dotnet build -m:1 -bl:build.binlog
-
-      - name: 🧪 test
-        shell: pwsh
-        run: dnx --yes retest -- --no-build
-
       - name: 📦 pack rid
         id: rid
         shell: pwsh
@@ -95,8 +88,22 @@ jobs:
             default           { throw "Unsupported OS for RID pack: ${{ matrix.os }}" }
           }
           "rid=$rid" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-          Write-Host "Packing WhatsBox.$rid and wd.$rid"
+          Write-Host "Packing WhatsBox pointer + WhatsBox.$rid into bin/ before WhatsDemo restore"
+          dotnet pack src/WhatsBox/WhatsBox.csproj -c $env:Configuration -bl:pointer-pack.binlog
           dotnet pack src/WhatsBox/WhatsBox.csproj -c $env:Configuration -r $rid -bl:"pack-$rid.binlog"
+
+      - name: 🙏 build
+        run: dotnet build -m:1 -bl:build.binlog
+
+      - name: 🧪 test
+        shell: pwsh
+        run: dnx --yes retest -- --no-build
+
+      - name: 📦 pack wd
+        shell: pwsh
+        run: |
+          $rid = '${{ steps.rid.outputs.rid }}'
+          Write-Host "Packing wd.$rid"
           dotnet pack src/WhatsDemo/WhatsDemo.csproj -c $env:Configuration -r $rid -bl:"pack-wd-$rid.binlog"
 
       - name: 📤 package
@@ -136,5 +143,5 @@ jobs:
 
       - name: ✓ ensure format
         run: |
-          dotnet format whitespace --verify-no-changes -v:diag --exclude ~/.nuget
-          dotnet format style --verify-no-changes -v:diag --exclude ~/.nuget
+          dotnet format whitespace --verify-no-changes --no-restore -v:diag --exclude ~/.nuget
+          dotnet format style --verify-no-changes --no-restore -v:diag --exclude ~/.nuget

@@ -54,6 +54,7 @@ jobs:
 
       - name: 📦 pack
         run: |
+          dotnet pack src/WhatsBox/WhatsBox.csproj -c $env:Configuration -bl:"pointer-pack.binlog"
           dotnet pack src/WhatsBox/WhatsBox.csproj -c $env:Configuration -r ${{ matrix.rid }} -bl:"pack-${{ matrix.rid }}.binlog"
           dotnet pack src/WhatsDemo/WhatsDemo.csproj -c $env:Configuration -r ${{ matrix.rid }} -bl:"pack-wd-${{ matrix.rid }}.binlog"
 
@@ -93,6 +94,25 @@ jobs:
         with:
           go-version-file: native/go.mod
           cache-dependency-path: native/go.sum
+
+      - name: 📦 whatsbox
+        run: |
+          $os = if ([System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform(
+              [System.Runtime.InteropServices.OSPlatform]::Windows)) { 'win' }
+          elseif ([System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform(
+              [System.Runtime.InteropServices.OSPlatform]::Linux)) { 'linux' }
+          elseif ([System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform(
+              [System.Runtime.InteropServices.OSPlatform]::OSX)) { 'osx' }
+          else { throw 'Unsupported OS for WhatsBox RID packages.' }
+          $cpu = switch ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture) {
+            'X64' { 'x64' }
+            'Arm64' { 'arm64' }
+            default { throw "Unsupported architecture '$_' for WhatsBox RID packages." }
+          }
+          $rid = "$os-$cpu"
+          Write-Host "Packing WhatsBox pointer + WhatsBox.$rid into bin/ before WhatsDemo restore"
+          dotnet pack src/WhatsBox/WhatsBox.csproj -c $env:Configuration -bl:pointer-pack.binlog
+          dotnet pack src/WhatsBox/WhatsBox.csproj -c $env:Configuration -r $rid -bl:"pack-$rid.binlog"
 
       - name: 🙏 build
         run: dotnet build -m:1 -bl:build.binlog
