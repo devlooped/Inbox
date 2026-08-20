@@ -16,7 +16,8 @@
     <ToolPackageRuntimeIdentifiers>win-x64;win-arm64;linux-x64;linux-arm64;osx-x64;osx-arm64</ToolPackageRuntimeIdentifiers>
     <IsPackable>true</IsPackable>
     <NoWarn>$(NoWarn);NU5128</NoWarn>
-    <RestoreSources>$(PackageOutputPath);https://api.nuget.org/v3/index.json</RestoreSources>
+    <RestoreSources>https://api.nuget.org/v3/index.json</RestoreSources>
+    <RestoreSources Condition="Exists('$(PackageOutputPath)')">$(PackageOutputPath);$(RestoreSources)</RestoreSources>
     <RestoreIgnoreFailedSources>true</RestoreIgnoreFailedSources>
   </PropertyGroup>
 
