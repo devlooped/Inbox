@@ -143,5 +143,5 @@ jobs:
 
       - name: ✓ ensure format
         run: |
-          dotnet format whitespace --verify-no-changes --no-restore -v:diag --exclude ~/.nuget
-          dotnet format style --verify-no-changes --no-restore -v:diag --exclude ~/.nuget
+          dotnet format whitespace --verify-no-changes -v:diag --exclude ~/.nuget
+          dotnet format style --verify-no-changes -v:diag --exclude ~/.nuget
