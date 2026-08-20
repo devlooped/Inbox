@@ -1,5 +1,17 @@
 # Changelog
 
+## [v0.1.5](https://github.com/devlooped/whatsbox/tree/v0.1.5) (2026-08-20)
+
+[Full Changelog](https://github.com/devlooped/whatsbox/compare/v0.1.4...v0.1.5)
+
+:sparkles: Implemented enhancements:
+
+- Subscribe is JID-only; fix directory identity and reply quotes [\#10](https://github.com/devlooped/whatsbox/pull/10) (@kzu)
+
+:twisted_rightwards_arrows: Merged:
+
+- Pack WhatsDemo as the wd tool with pointer and RID packages [\#12](https://github.com/devlooped/whatsbox/pull/12) (@kzu)
+
 ## [v0.1.4](https://github.com/devlooped/whatsbox/tree/v0.1.4) (2026-08-19)
 
 [Full Changelog](https://github.com/devlooped/whatsbox/compare/v0.1.3...v0.1.4)
