@@ -7,7 +7,7 @@ public class ProjectReferenceTests
     {
         var csproj = FindDemoProject();
         var xml = File.ReadAllText(csproj);
-        Assert.Contains("""<PackageReference Include="WhatsBox" Version="*" />""", xml);
+        Assert.Contains("""<PackageReference Include="WhatsBox" Version="$(Version)" />""", xml);
         Assert.Contains("<PackageId>wd</PackageId>", xml);
         Assert.Contains("<PackAsTool>true</PackAsTool>", xml);
         Assert.Contains("<PublishAot>true</PublishAot>", xml);
