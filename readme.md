@@ -267,6 +267,7 @@ and error tokens: [`docs/INBOX.md`](docs/INBOX.md). LID / QR / store layout:
 ## Demo
 
 <!-- include src/WhatsDemo/readme.md#content -->
+<!-- #content -->
 `wd` is a pointer tool: it restores the matching RID package
 (`wd.win-x64`, `wd.linux-x64`, …) and starts the Native AOT REPL plus
 the `whatsbox` sidecar.
@@ -296,6 +297,7 @@ The command is `wd`. RID matrix matches WhatsBox: `win-x64`, `win-arm64`,
 The working directory is the session root. First run creates `.store`,
 prints a pairing QR, and waits for WhatsApp → Linked devices. Later runs
 reuse that store.
+<!-- #content -->
 <!-- src/WhatsDemo/readme.md#content -->
 
 ### v1 scope
