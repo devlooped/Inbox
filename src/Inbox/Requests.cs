@@ -1,6 +1,6 @@
-namespace WhatsBox;
+namespace Inbox;
 
-/// <summary>PRODUCT.md §5.1 / §13 <c>initialize</c> parameters.</summary>
+/// <summary>INBOX.md §5.1 / §13 <c>initialize</c> parameters.</summary>
 public sealed record InitializeOptions
 {
     /// <summary>Protocol version. v1 value is <c>0.1</c>.</summary>
@@ -31,7 +31,7 @@ public sealed record InitializeOptions
     public static string DefaultDeviceName { get; } = $"whatsbox on {Environment.MachineName}";
 }
 
-/// <summary>PRODUCT.md §5.8 / §13 <c>directory.list</c> parameters.</summary>
+/// <summary>INBOX.md §5.8 / §13 <c>directory.list</c> parameters.</summary>
 public sealed record DirectoryListOptions
 {
     /// <summary>Optional match against name, <c>pn</c>, <c>handle</c>, and JID string.</summary>
@@ -47,20 +47,17 @@ public sealed record DirectoryListOptions
     public string? Cursor { get; init; }
 }
 
-/// <summary>Quote target for <see cref="WhatsBoxClient.SendAsync"/>.</summary>
+/// <summary>Quote target for <see cref="InboxClient.SendAsync"/>.</summary>
 public sealed record MessageReply(string Id, string By, string? Text = null);
 
-/// <summary>Reaction target for <see cref="WhatsBoxClient.SendAsync"/>.</summary>
-public sealed record MessageReact(string Id, string By, string Emoji);
-
-/// <summary>PRODUCT.md §5.7 <c>subscribe</c> / <c>unsubscribe</c> params.</summary>
+/// <summary>INBOX.md §5.7 <c>subscribe</c> / <c>unsubscribe</c> params.</summary>
 public sealed record TopicsParams
 {
     /// <summary>Canonical topics (LID, group JID, PN JID, or <c>$directory</c>).</summary>
     public required IReadOnlyList<string> Topics { get; init; }
 }
 
-/// <summary>PRODUCT.md §5.9 <c>directory.get</c> params.</summary>
+/// <summary>INBOX.md §5.9 <c>directory.get</c> params.</summary>
 public sealed record DirectoryGetParams
 {
     /// <summary>LID, PN JID, or phone number.</summary>
@@ -73,26 +70,23 @@ public sealed record DirectoryGetParams
     public bool? Icon { get; init; }
 }
 
-/// <summary>PRODUCT.md §5.10 <c>messages.send</c> params.</summary>
+/// <summary>INBOX.md <c>messages.send</c> params.</summary>
 public sealed record MessagesSendParams
 {
     /// <summary>Chat (LID / PN / phone / group JID).</summary>
     public required string To { get; init; }
 
-    /// <summary>Body. Optional if <see cref="Path"/> or <see cref="React"/> is set.</summary>
-    public string? Text { get; init; }
-
-    /// <summary>Relative path under <c>files</c>.</summary>
-    public string? Path { get; init; }
+    /// <summary>Non-empty content parts.</summary>
+    public required IReadOnlyList<ContentPart> Contents { get; init; }
 
     /// <summary>Quote target.</summary>
     public MessageReply? Reply { get; init; }
 
-    /// <summary>Reaction target.</summary>
-    public MessageReact? React { get; init; }
+    /// <summary>Optional grouping key. Ignored when <c>capabilities.reply</c> is <c>quote</c>.</summary>
+    public string? Context { get; init; }
 }
 
-/// <summary>PRODUCT.md §5.11 <c>messages.read</c> params.</summary>
+/// <summary>INBOX.md §5.11 <c>messages.read</c> params.</summary>
 public sealed record MessagesReadParams
 {
     /// <summary>Chat (LID / PN / phone / group JID).</summary>
@@ -101,6 +95,7 @@ public sealed record MessagesReadParams
     /// <summary>Message ids. Required, non-empty.</summary>
     public required IReadOnlyList<string> Ids { get; init; }
 
-    /// <summary>Author. Required for groups; omit in 1:1.</summary>
-    public string? By { get; init; }
+    /// <summary>Author. Always required. The WhatsApp sidecar ignores it in 1:1.</summary>
+    public required string By { get; init; }
 }
+

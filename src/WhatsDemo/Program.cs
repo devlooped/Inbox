@@ -1,4 +1,5 @@
 using System.Text;
+using Inbox;
 using WhatsBox;
 using WhatsDemo;
 
@@ -21,10 +22,11 @@ Console.CancelKeyPress += (_, e) =>
     cts.Cancel();
 };
 
-WhatsBoxClient box;
+InboxClient box;
 try
 {
-    box = new WhatsBoxClient();
+    var host = WhatsBoxHost.Start();
+    box = new InboxClient(host.StandardOutput, host.StandardInput, host, host.StandardError);
 }
 catch (Exception ex)
 {
@@ -83,7 +85,7 @@ await using (box)
 return 0;
 
 static async Task PumpAsync(
-    WhatsBoxClient box,
+    InboxClient box,
     DemoSession session,
     DirectorySync sync,
     RecentChats recents,
@@ -121,28 +123,27 @@ static async Task PumpAsync(
                     session.ClearIdentity();
                     output.WriteLine(loggedOut.Reason is { } reason ? $"logged out: {reason}" : "logged out");
                     break;
-                case ChatText text:
-                    if (text.By is not "me")
-                        sync.RememberAuthor(text.By, text.Handle, text.ByName);
-                    if (text.By is not "me" && text.TopicName is { } topicName)
-                        sync.RememberAuthor(text.Topic, null, topicName);
-                    recents.Note(text.Topic, text.Id, text.By, text.Text);
-                    try { await sync.ResolveAsync(text.By, cancellation); }
+                case ChatMessage msg:
+                    if (msg.By is not "me")
+                        sync.RememberAuthor(msg.By, msg.Handle, msg.ByName);
+                    if (msg.By is not "me" && msg.TopicName is { } topicName)
+                        sync.RememberAuthor(msg.Topic, null, topicName);
+                    recents.Note(msg.Topic, msg.Id, msg.By, msg.Text);
+                    try { await sync.ResolveAsync(msg.By, cancellation); }
                     catch (Exception ex) when (ex is not OperationCanceledException)
                     {
                         output.WriteLine(ex.Message);
                     }
                     var line = session.FormatInboundText(
-                        text.Topic, text.Id, text.Text, DateTimeOffset.Now, text.By, text.Handle, text.ByName);
+                        msg.Topic, msg.Id, msg.Text, DateTimeOffset.Now, msg.By, msg.Handle, msg.ByName);
                     if (line is null)
                         break;
                     output.WriteLine(line);
-                    if (text.Id is { } id)
+                    if (msg is { Id: not null, By: not null })
                     {
                         try
                         {
-                            var by = TopicResolver.IsGroup(text.Topic) ? text.By : null;
-                            await box.ReadAsync(text.Topic, [id], by, cancellation);
+                            await box.ReadAsync(msg, cancellation);
                         }
                         catch (Exception ex) when (ex is not OperationCanceledException)
                         {
@@ -160,7 +161,7 @@ static async Task PumpAsync(
 }
 
 static async Task RunReplAsync(
-    WhatsBoxClient box,
+    InboxClient box,
     DemoSession session,
     DirectorySync sync,
     RecentChats recents,
@@ -225,7 +226,7 @@ static async Task RunReplAsync(
 }
 
 static async Task DispatchAsync(
-    WhatsBoxClient box,
+    InboxClient box,
     DemoSession session,
     DirectorySync sync,
     RecentChats recents,
@@ -272,9 +273,9 @@ static async Task DispatchAsync(
                 var result = await box.SubscribeAsync([topic], cancellation);
                 var row = await sync.OnSubscribeAsync(topic, result.Topics, cancellation);
                 if (row is not null)
-                    output.WriteLine(JsonPanel.Render(row, WhatsJsonContext.Default.DirectoryRow));
+                    output.WriteLine(JsonPanel.Render(row, InboxJsonContext.Default.DirectoryRow));
                 else
-                    output.WriteLine(JsonPanel.Render(result, WhatsJsonContext.Default.TopicsResult));
+                    output.WriteLine(JsonPanel.Render(result, InboxJsonContext.Default.TopicsResult));
                 break;
             }
         case "unsubscribe":
@@ -290,7 +291,7 @@ static async Task DispatchAsync(
                 var result = await box.UnsubscribeAsync([topic], cancellation);
                 await sync.OnUnsubscribeAsync(topic, result.Topics, cancellation);
                 recents.ForgetTopic(topic);
-                output.WriteLine(JsonPanel.Render(result, WhatsJsonContext.Default.TopicsResult));
+                output.WriteLine(JsonPanel.Render(result, InboxJsonContext.Default.TopicsResult));
                 break;
             }
         case "directory":
@@ -300,14 +301,14 @@ static async Task DispatchAsync(
                     break;
                 var row = await box.GetDirectoryAsync(id, icon: false, cancellation);
                 sync.Remember(row);
-                output.WriteLine(JsonPanel.Render(row, WhatsJsonContext.Default.DirectoryRow));
+                output.WriteLine(JsonPanel.Render(row, InboxJsonContext.Default.DirectoryRow));
                 break;
             }
     }
 }
 
 static async Task SendChatAsync(
-    WhatsBoxClient box,
+    InboxClient box,
     DemoSession session,
     RecentChats recents,
     ConsoleLock output,
@@ -332,7 +333,7 @@ static async Task SendChatAsync(
 }
 
 static async Task EnsureSubscribedAsync(
-    WhatsBoxClient box,
+    InboxClient box,
     DirectorySync sync,
     string? topic,
     CancellationToken cancellation)
@@ -350,7 +351,7 @@ static async Task EnsureSubscribedAsync(
 }
 
 static async Task<string?> ReadTopicAsync(
-    WhatsBoxClient box,
+    InboxClient box,
     LineEditor editor,
     ConsoleLock output,
     string argument,

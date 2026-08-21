@@ -279,20 +279,30 @@ func groupRow(jid, name string, parts []dirstore.Participant) dirstore.Row {
 	return dirstore.Row{Topic: jid, Kind: "group", Name: name, Participants: parts, ParticipantCount: len(parts)}
 }
 
+type sendReply struct {
+	ID   string `json:"id"`
+	By   string `json:"by"`
+	Text string `json:"text"`
+}
+
+type contentPart struct {
+	Type   string `json:"type"`
+	Text   string `json:"text"`
+	Path   string `json:"path"`
+	Target string `json:"target"`
+	By     string `json:"by"`
+	Emoji  string `json:"emoji"`
+}
+
 type sendParams struct {
-	To    string `json:"to"`
-	Text  string `json:"text"`
-	Path  string `json:"path"`
-	Reply *struct {
-		ID   string `json:"id"`
-		By   string `json:"by"`
-		Text string `json:"text"`
-	} `json:"reply"`
-	React *struct {
-		ID    string `json:"id"`
-		By    string `json:"by"`
-		Emoji string `json:"emoji"`
-	} `json:"react"`
+	To       string        `json:"to"`
+	Reply    *sendReply    `json:"reply"`
+	Context  string        `json:"context"`
+	Contents []contentPart `json:"contents"`
+}
+
+func errUnsupported(capability string) *rpc.Error {
+	return rpc.ErrData(rpc.TokUnsupported, map[string]any{"capability": capability})
 }
 
 func (d *Daemon) messagesSend(ctx context.Context, raw json.RawMessage) (any, *rpc.Error) {
@@ -303,16 +313,56 @@ func (d *Daemon) messagesSend(ctx context.Context, raw json.RawMessage) (any, *r
 	if strings.TrimSpace(p.To) == "" {
 		return nil, rpc.ErrData(rpc.TokInvalidParams, "to is required")
 	}
-	if p.Text == "" && p.Path == "" && p.React == nil {
-		return nil, rpc.ErrData(rpc.TokInvalidParams, "at least one of text, path, react")
+	if len(p.Contents) == 0 {
+		return nil, rpc.ErrData(rpc.TokInvalidParams, "contents is required")
 	}
 	if p.Reply != nil && (p.Reply.ID == "" || p.Reply.By == "") {
 		return nil, rpc.ErrData(rpc.TokInvalidParams, "reply requires id and by")
 	}
-	if p.React != nil && (p.React.ID == "" || p.React.By == "") {
-		return nil, rpc.ErrData(rpc.TokInvalidParams, "react requires id and by")
+
+	nReact, nBlob, nBody := 0, 0, 0
+	var react *contentPart
+	var blob *contentPart
+	var texts []string
+	for i := range p.Contents {
+		part := &p.Contents[i]
+		switch part.Type {
+		case "reaction":
+			nReact++
+			react = part
+		case "text":
+			nBody++
+			if part.Text != "" {
+				texts = append(texts, part.Text)
+			}
+		case "image", "video", "audio", "document", "sticker":
+			nBody++
+			nBlob++
+			blob = part
+		case "location", "unknown":
+			return nil, rpc.ErrData(rpc.TokInvalidParams, "unsupported content type "+part.Type)
+		default:
+			return nil, rpc.ErrData(rpc.TokInvalidParams, "unknown content type")
+		}
 	}
-	if p.Path != "" && !d.filesDir().Enabled() {
+	if nReact > 0 && nBody > 0 {
+		return nil, rpc.ErrData(rpc.TokInvalidParams, "reaction cannot mix with body parts")
+	}
+	if nReact > 1 {
+		return nil, rpc.ErrData(rpc.TokInvalidParams, "exactly one reaction part")
+	}
+	if nReact == 1 {
+		if p.Reply != nil || strings.TrimSpace(p.Context) != "" {
+			return nil, rpc.ErrData(rpc.TokInvalidParams, "reaction cannot include reply or context")
+		}
+		if react.Target == "" || react.By == "" {
+			return nil, rpc.ErrData(rpc.TokInvalidParams, "reaction requires target and by")
+		}
+	}
+	if nBlob > 1 {
+		return nil, errUnsupported("attachments")
+	}
+	if nBlob > 0 && !d.filesDir().Enabled() {
 		return nil, rpc.Err(rpc.TokFilesRequired)
 	}
 	if !d.online() {
@@ -325,19 +375,24 @@ func (d *Daemon) messagesSend(ctx context.Context, raw json.RawMessage) (any, *r
 	cli := d.client()
 	var id string
 	var sendErr error
-	var evKind, evText, evPath, evEmoji, evTarget string
-	if p.React != nil && p.Text == "" && p.Path == "" {
+	var echoKind string
+	var echoContents []map[string]any
+	caption := strings.Join(texts, "")
+	if nReact == 1 {
 		id, sendErr = cli.SendReact(ctx, wa.SendReact{
 			To:    canon,
-			ID:    p.React.ID,
-			By:    d.normalizeBy(p.React.By),
-			Emoji: p.React.Emoji,
+			ID:    react.Target,
+			By:    d.normalizeBy(react.By),
+			Emoji: react.Emoji,
 		})
-		evKind = "reaction"
-		evEmoji = p.React.Emoji
-		evTarget = p.React.ID
-	} else if p.Path != "" {
-		abs, rerr := d.filesDir().Resolve(p.Path)
+		echoKind = "reaction"
+		echoContents = []map[string]any{{
+			"type":   "reaction",
+			"target": react.Target,
+			"emoji":  react.Emoji,
+		}}
+	} else if blob != nil {
+		abs, rerr := d.filesDir().Resolve(blob.Path)
 		if rerr != nil {
 			if e, ok := rerr.(*rpc.Error); ok {
 				return nil, e
@@ -348,26 +403,34 @@ func (d *Daemon) messagesSend(ctx context.Context, raw json.RawMessage) (any, *r
 		if rerr != nil {
 			return nil, rpc.ErrData(rpc.TokInvalidParams, rerr.Error())
 		}
-		kind := files.KindForPath(abs)
+		kind := blob.Type
+		if kind == "" {
+			kind = files.KindForPath(abs)
+		}
 		id, sendErr = cli.SendMedia(ctx, wa.SendMedia{
 			To:        canon,
-			Path:      p.Path,
+			Path:      blob.Path,
 			Data:      data,
 			MIME:      files.MIMEForPath(abs),
 			FileName:  filepath.Base(abs),
-			Caption:   p.Text,
+			Caption:   caption,
 			Kind:      kind,
 			ReplyID:   replyID(p),
 			ReplyBy:   replyBy(d, p),
 			ReplyText: replyText(p),
 		})
-		evKind = kind
-		evText = p.Text
-		evPath = p.Path
+		echoKind = "message"
+		echoContents = []map[string]any{{"type": kind, "path": blob.Path}}
+		if caption != "" {
+			echoContents = append(echoContents, map[string]any{"type": "text", "text": caption})
+		}
 	} else {
+		if caption == "" {
+			return nil, rpc.ErrData(rpc.TokInvalidParams, "contents is required")
+		}
 		id, sendErr = cli.SendText(ctx, wa.SendText{
 			To:        canon,
-			Text:      p.Text,
+			Text:      caption,
 			ReplyID:   replyID(p),
 			ReplyBy:   replyBy(d, p),
 			ReplyText: replyText(p),
@@ -375,8 +438,8 @@ func (d *Daemon) messagesSend(ctx context.Context, raw json.RawMessage) (any, *r
 		if p.Reply != nil {
 			d.logf("debug", "send reply to=%s id=%s by=%s text=%q", canon, replyID(p), replyBy(d, p), replyText(p))
 		}
-		evKind = "text"
-		evText = p.Text
+		echoKind = "message"
+		echoContents = []map[string]any{{"type": "text", "text": caption}}
 	}
 	if sendErr != nil {
 		if sendErr == wa.ErrNotConnected {
@@ -386,22 +449,13 @@ func (d *Daemon) messagesSend(ctx context.Context, raw json.RawMessage) (any, *r
 	}
 	if d.bus.Has(canon) {
 		ev := map[string]any{
-			"topic": canon,
-			"kind":  evKind,
-			"id":    id,
-			"by":    "me",
+			"topic":    canon,
+			"kind":     echoKind,
+			"id":       id,
+			"by":       "me",
+			"contents": echoContents,
 		}
 		d.decorateChat(ev, canon, "me", "")
-		if evText != "" {
-			ev["text"] = evText
-		}
-		if evPath != "" {
-			ev["path"] = evPath
-		}
-		if evKind == "reaction" {
-			ev["emoji"] = evEmoji
-			ev["target"] = evTarget
-		}
 		d.emit(ev)
 	}
 	return map[string]any{"id": id, "topic": canon}, nil
@@ -461,19 +515,15 @@ func (d *Daemon) messagesRead(ctx context.Context, raw json.RawMessage) (any, *r
 	if !d.online() {
 		return nil, rpc.Err(rpc.TokDisconnected)
 	}
+	if strings.TrimSpace(p.By) == "" {
+		return nil, rpc.ErrData(rpc.TokInvalidParams, "by is required")
+	}
 	canon, err := d.resolveTopic(ctx, p.To, false)
 	if err != nil {
 		return nil, err
 	}
-	isGroup := topic.IsGroup(canon)
-	if isGroup && strings.TrimSpace(p.By) == "" {
-		return nil, rpc.ErrData(rpc.TokInvalidParams, "by is required for groups")
-	}
-	if !isGroup && strings.TrimSpace(p.By) != "" {
-		return nil, rpc.ErrData(rpc.TokInvalidParams, "by must be omitted for 1:1")
-	}
 	sender := ""
-	if isGroup {
+	if topic.IsGroup(canon) {
 		sender = d.normalizeBy(p.By)
 		if sender == "me" {
 			sender = d.me()

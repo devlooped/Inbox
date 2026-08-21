@@ -1,4 +1,4 @@
-using WhatsBox;
+using Inbox;
 
 namespace WhatsDemo;
 

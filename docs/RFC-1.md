@@ -3,7 +3,7 @@
 **Status:** Accepted  
 
 **Date:** 2026-08-20  
-**Affects:** protocol (`docs/PRODUCT.md`), native `whatsbox`, managed `WhatsBox` client  
+**Affects:** protocol (`docs/INBOX.md`, `docs/WHATSBOX.md`), native `whatsbox`, managed `WhatsBox` client  
 **Motivating consumer:** `src/WhatsDemo`
 
 ---
@@ -17,6 +17,8 @@ Building a real companion REPL against v0.1 showed three contract holes that loo
 3. **`messages.send` reply used WhatsApp `ContextInfo` incorrectly.** Setting `remoteJid` on a same-chat quote rendered `Group • {name}`. Omitting `quotedMessage` and sending `participant` as the literal `"me"` produced no quote bubble at all. WhatsApp does not resolve quotes server-side.
 
 This RFC argues those fixes belong in the **protocol and both libraries**, not only in the demo. The demo is the smallest client that actually *uses* subscribe, directory, send, reply, and mark-read together; the failures showed up there first.
+
+Chat payloads on the Box v0.1 wire are now `kind` + `contents[]` (see INBOX.md); this RFC’s addressing and ContextInfo rules are unchanged.
 
 ---
 
@@ -102,11 +104,13 @@ whatsmeow does not offer `Reply()`. A quote is `ExtendedTextMessage.ContextInfo`
 
 ### 3.4 Group mark-read without `by`
 
-**Was:** Demo called `ReadAsync(topic, [id])` for every inbound text. Protocol requires `by` in groups and **forbids** it in 1:1.
+**Was:** Demo called `ReadAsync(topic, [id])` for every inbound text. Protocol required `by` in groups and **forbade** it in 1:1.
 
 **What broke:** First inbound group message printed `invalid_params: by is required for groups` in the REPL, looking like a send failure.
 
-**Change:** Demo passes `by` only when `topic` is `@g.us`. Native already enforced the rule; the consumer was wrong.
+**Change (then):** Demo passed `by` only when `topic` is `@g.us`. Native already enforced the rule; the consumer was wrong.
+
+**Change (now):** `by` is required on every `messages.read`, same as reply/react. The client copies it from the inbound event and never parses `@g.us`. Native ignores `by` on 1:1 (`MarkRead` has no DM participant).
 
 ---
 
@@ -159,7 +163,7 @@ Not a protocol change, but the required consumer pattern:
 | `@` | Subscribed chats; groups by subject; users `@handle` / `@name` |
 | `/unsubscribe` | Completion of subscribed chats minus self |
 | Reply | `RecentChats` supplies `id`, `by`, and **text** |
-| Group read | `ReadAsync(..., by)` only for `@g.us` |
+| Read | Always `ReadAsync(..., by)` from the inbound event |
 | Debug loop | `demo.ps1` packs `WhatsBox` + `WhatsBox.{rid}` 42.42.42, publishes Debug, runs with repo cwd |
 
 ---
@@ -224,6 +228,6 @@ Land the protocol wording in `PRODUCT.md` (already drafted), ship native + `What
 - list-then-subscribe
 - last-message cache for `reply.text`
 - `me` as a subscription that is not user-removable
-- group `messages.read.by`
+- always pass `messages.read.by` (daemon ignores it in 1:1)
 
 Do not put name or phone resolution back on `subscribe`. Do not look up quote bodies in the daemon unless v2 stores message text — which v1 explicitly refuses.

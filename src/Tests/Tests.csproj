@@ -12,6 +12,10 @@
     <Using Include="Xunit" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\Inbox\Inbox.csproj" />
     <ProjectReference Include="..\WhatsBox\WhatsBox.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="..\..\docs\INBOX.md" Link="docs\INBOX.md" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

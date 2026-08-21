@@ -45,7 +45,7 @@ public class ProjectReferenceTests
         Assert.Contains("session.BeginSend(text)", src);
         Assert.Contains("session.RememberSent(sent.Id, text)", src);
         Assert.Contains("session.FormatOutbound(text, DateTimeOffset.Now, sent.Topic)", src);
-        Assert.Contains("text.Handle, text.ByName", src);
+        Assert.Contains("msg.Handle, msg.ByName", src);
         Assert.Contains("AtMentions.TryParse", src);
         Assert.Contains("Completions.Complete", src);
         Assert.Contains("RecentChats", src);
@@ -53,8 +53,8 @@ public class ProjectReferenceTests
         var beginSend = src.IndexOf("session.BeginSend(text)", StringComparison.Ordinal);
         var sendAsync = src.IndexOf("box.SendAsync(to, text: text, reply: reply", StringComparison.Ordinal);
         Assert.True(beginSend >= 0 && sendAsync > beginSend);
-        Assert.Contains("box.ReadAsync(text.Topic, [id]", src);
-        Assert.Contains("TopicResolver.IsGroup(text.Topic) ? text.By : null", src);
+        Assert.Contains("box.ReadAsync(msg, cancellation)", src);
+        Assert.DoesNotContain("TopicResolver.IsGroup(msg.Topic) ? msg.By : null", src);
         Assert.Contains("SlashCommands.TryParse", src);
         Assert.Contains("LogoutAsync", src);
         Assert.Contains("DisconnectAsync", src);
@@ -63,7 +63,11 @@ public class ProjectReferenceTests
         Assert.Contains("UnsubscribeAsync", src);
         Assert.Contains("cannot unsubscribe self-chat", src);
         Assert.Contains("OnSubscribeAsync", src);
-        Assert.Contains("WhatsJsonContext.Default.DirectoryRow", src);
+        Assert.Contains("InboxJsonContext.Default.DirectoryRow", src);
+        Assert.Contains("WhatsBoxHost.Start()", src);
+        Assert.Contains("new InboxClient(host.StandardOutput, host.StandardInput, host, host.StandardError)", src);
+        Assert.DoesNotContain("new WhatsBoxClient", src);
+        Assert.DoesNotContain("JsonRpc", src);
         Assert.Contains("JsonPanel.Render", src);
         Assert.Contains("ReadArgumentAsync", src);
         Assert.Contains("ReadTopicAsync", src);

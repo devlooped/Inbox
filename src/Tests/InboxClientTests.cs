@@ -1,39 +1,41 @@
 using System.Text.Json;
+using Inbox;
 using WhatsBox;
 
 namespace Tests;
 
-public class WhatsBoxClientTests
+public class InboxClientTests
 {
     [Fact]
     public async Task Events_maps_session_qr_and_chat_text()
     {
         var stdout = new LineSource();
         var stdin = new LineSink();
-        await using var client = new WhatsBoxClient(stdout, stdin);
+        await using var client = new InboxClient(stdout, stdin);
 
         var seen = CollectEvents(client);
 
         stdout.WriteLine("""{"jsonrpc":"2.0","method":"event","params":{"topic":"$session","kind":"qr","code":"2@fixture"}}""");
-        stdout.WriteLine("""{"jsonrpc":"2.0","method":"event","params":{"topic":"999@lid","kind":"text","id":"3EB0","by":"999@lid","text":"hi"}}""");
-        stdout.WriteLine("""{"jsonrpc":"2.0","method":"event","params":{"topic":"999@lid","kind":"image","id":"3EB1","by":"999@lid","path":"in/p.jpg","text":"pic"}}""");
+        stdout.WriteLine("""{"jsonrpc":"2.0","method":"event","params":{"topic":"999@lid","kind":"message","id":"3EB0","by":"999@lid","contents":[{"type":"text","text":"hi"}]}}""");
+        stdout.WriteLine("""{"jsonrpc":"2.0","method":"event","params":{"topic":"999@lid","kind":"message","id":"3EB1","by":"999@lid","contents":[{"type":"image","path":"in/p.jpg"},{"type":"text","text":"pic"}]}}""");
         stdout.Complete();
 
         var collected = await seen.WaitAsync(TimeSpan.FromSeconds(5));
 
         var qr = Assert.Single(collected.OfType<SessionQr>());
         Assert.Equal("2@fixture", qr.Code);
-        var text = Assert.Single(collected.OfType<ChatText>());
+        var messages = collected.OfType<ChatMessage>().ToList();
+        Assert.Equal(2, messages.Count);
+        var text = messages[0];
         Assert.Equal("999@lid", text.Topic);
         Assert.Equal("3EB0", text.Id);
         Assert.Equal("999@lid", text.By);
         Assert.Equal("hi", text.Text);
-        var image = Assert.Single(collected.OfType<ChatImage>());
-        Assert.Equal("image", image.Kind);
-        Assert.Equal("in/p.jpg", image.Path);
+        var image = messages[1];
+        Assert.Equal("message", image.Kind);
+        var media = Assert.IsType<ImagePart>(image.Contents[0]);
+        Assert.Equal("in/p.jpg", media.Path);
         Assert.Equal("pic", image.Text);
-        Assert.IsAssignableFrom<ChatMedia>(image);
-        Assert.IsAssignableFrom<ChatMessage>(text);
     }
 
     [Fact]
@@ -41,7 +43,7 @@ public class WhatsBoxClientTests
     {
         var stdout = new LineSource();
         var stdin = new LineSink();
-        await using var client = new WhatsBoxClient(stdout, stdin);
+        await using var client = new InboxClient(stdout, stdin);
 
         var seen = CollectEvents(client);
 
@@ -62,7 +64,7 @@ public class WhatsBoxClientTests
     {
         var stdout = new LineSource();
         var stdin = new LineSink();
-        await using var client = new WhatsBoxClient(stdout, stdin);
+        await using var client = new InboxClient(stdout, stdin);
 
         var qrSeen = new TaskCompletionSource<SessionQr>(TaskCreationOptions.RunContinuationsAsynchronously);
         var collect = Task.Run(async () =>
@@ -103,7 +105,7 @@ public class WhatsBoxClientTests
     {
         var stdout = new LineSource();
         var stdin = new LineSink();
-        await using var client = new WhatsBoxClient(stdout, stdin);
+        await using var client = new InboxClient(stdout, stdin);
 
         var task = client.StatusAsync();
         var request = await stdin.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(5));
@@ -112,7 +114,7 @@ public class WhatsBoxClientTests
 
         stdout.WriteLine(RpcError(id!, -32001, "not_initialized"));
 
-        var ex = await Assert.ThrowsAsync<WhatsRpcException>(() => task.WaitAsync(TimeSpan.FromSeconds(5)));
+        var ex = await Assert.ThrowsAsync<InboxRpcException>(() => task.WaitAsync(TimeSpan.FromSeconds(5)));
         Assert.Equal(-32001, ex.Code);
         Assert.Equal("not_initialized", ex.Token);
     }
@@ -122,7 +124,7 @@ public class WhatsBoxClientTests
     {
         var stdout = new LineSource();
         var stdin = new LineSink();
-        await using var client = new WhatsBoxClient(stdout, stdin);
+        await using var client = new InboxClient(stdout, stdin);
 
         var omitted = client.GetDirectoryAsync("999@lid");
         var line1 = await stdin.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(5));
@@ -160,7 +162,7 @@ public class WhatsBoxClientTests
         Assert.True(pid > 0);
         Assert.True(IsProcessRunning(pid));
 
-        await using (var client = new WhatsBoxClient(host))
+        await using (var client = new InboxClient(host.StandardOutput, host.StandardInput, host, host.StandardError))
         {
             var store = Path.Combine(Path.GetTempPath(), "whatsbox-test-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(store);
@@ -180,11 +182,64 @@ public class WhatsBoxClientTests
     }
 
     [Fact]
+    public async Task Send_and_react_write_contents_parts()
+    {
+        var stdout = new LineSource();
+        var stdin = new LineSink();
+        await using var client = new InboxClient(stdout, stdin);
+
+        var send = client.SendAsync("999@lid", text: "hello", reply: new MessageReply("t1", "me", "orig"));
+        var line1 = await stdin.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(5));
+        using (var req = JsonDocument.Parse(line1))
+        {
+            Assert.Equal("messages.send", req.RootElement.GetProperty("method").GetString());
+            var p = req.RootElement.GetProperty("params");
+            Assert.Equal("999@lid", p.GetProperty("to").GetString());
+            var part = Assert.Single(p.GetProperty("contents").EnumerateArray());
+            Assert.Equal("text", part.GetProperty("type").GetString());
+            Assert.Equal("hello", part.GetProperty("text").GetString());
+            Assert.Equal("t1", p.GetProperty("reply").GetProperty("id").GetString());
+            Assert.False(p.TryGetProperty("text", out _));
+            Assert.False(p.TryGetProperty("path", out _));
+            Assert.False(p.TryGetProperty("react", out _));
+            stdout.WriteLine($"{{\"jsonrpc\":\"2.0\",\"id\":\"{req.RootElement.GetProperty("id").GetString()}\",\"result\":{{\"id\":\"m1\",\"topic\":\"999@lid\"}}}}");
+        }
+        Assert.Equal("m1", (await send.WaitAsync(TimeSpan.FromSeconds(5))).Id);
+
+        var react = client.ReactAsync("999@lid", "t1", "999@lid", "👍");
+        var line2 = await stdin.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(5));
+        using (var req = JsonDocument.Parse(line2))
+        {
+            var p = req.RootElement.GetProperty("params");
+            var part = Assert.Single(p.GetProperty("contents").EnumerateArray());
+            Assert.Equal("reaction", part.GetProperty("type").GetString());
+            Assert.Equal("t1", part.GetProperty("target").GetString());
+            Assert.Equal("👍", part.GetProperty("emoji").GetString());
+            stdout.WriteLine($"{{\"jsonrpc\":\"2.0\",\"id\":\"{req.RootElement.GetProperty("id").GetString()}\",\"result\":{{\"id\":\"r1\",\"topic\":\"999@lid\"}}}}");
+        }
+        Assert.Equal("r1", (await react.WaitAsync(TimeSpan.FromSeconds(5))).Id);
+
+        var read = client.ReadAsync(new ChatMessage { Topic = "999@lid", Id = "3EB0", By = "999@lid" });
+        var line3 = await stdin.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(5));
+        using (var req = JsonDocument.Parse(line3))
+        {
+            Assert.Equal("messages.read", req.RootElement.GetProperty("method").GetString());
+            var p = req.RootElement.GetProperty("params");
+            Assert.Equal("999@lid", p.GetProperty("to").GetString());
+            Assert.Equal("3EB0", Assert.Single(p.GetProperty("ids").EnumerateArray()).GetString());
+            Assert.Equal("999@lid", p.GetProperty("by").GetString());
+            stdout.WriteLine($"{{\"jsonrpc\":\"2.0\",\"id\":\"{req.RootElement.GetProperty("id").GetString()}\",\"result\":{{\"topic\":\"999@lid\"}}}}");
+        }
+        Assert.Equal("999@lid", (await read.WaitAsync(TimeSpan.FromSeconds(5))).Topic);
+        stdout.Complete();
+    }
+
+    [Fact]
     public async Task Initialize_writes_default_device_name()
     {
         var stdout = new LineSource();
         var stdin = new LineSink();
-        await using var client = new WhatsBoxClient(stdout, stdin);
+        await using var client = new InboxClient(stdout, stdin);
 
         var task = client.InitializeAsync(@"D:\data\whatsbox");
         var line = await stdin.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(5));
@@ -207,8 +262,10 @@ public class WhatsBoxClientTests
         Directory.CreateDirectory(store);
         try
         {
-            await using var client = WhatsBoxClient.Start();
+            var host = WhatsBoxHost.Start();
+            await using var client = new InboxClient(host.StandardOutput, host.StandardInput, host, host.StandardError);
             var snap = await client.InitializeAsync(store).WaitAsync(TimeSpan.FromSeconds(30));
+            Console.WriteLine($"initialize status={snap.Status}");
             Assert.Equal("new", snap.Status);
             Assert.Contains("$session", snap.Topics);
 
@@ -221,10 +278,10 @@ public class WhatsBoxClientTests
         }
     }
 
-    static Task<List<WhatsEvent>> CollectEvents(WhatsBoxClient client)
+    static Task<List<InboxEvent>> CollectEvents(InboxClient client)
         => Task.Run(async () =>
         {
-            var list = new List<WhatsEvent>();
+            var list = new List<InboxEvent>();
             await foreach (var ev in client.Events)
                 list.Add(ev);
             return list;
@@ -249,3 +306,4 @@ public class WhatsBoxClientTests
         }
     }
 }
+

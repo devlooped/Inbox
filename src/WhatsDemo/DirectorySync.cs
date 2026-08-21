@@ -1,5 +1,5 @@
 using System.Collections.Concurrent;
-using WhatsBox;
+using Inbox;
 
 namespace WhatsDemo;
 
@@ -161,7 +161,7 @@ public sealed class DirectorySync
         {
             await task.WaitAsync(cancellation).ConfigureAwait(false);
         }
-        catch (WhatsRpcException)
+        catch (InboxRpcException)
         {
             // Keep any persisted alias; the prompt falls back to the raw id.
         }
@@ -191,7 +191,7 @@ public sealed class DirectorySync
         {
             return await get(id, cancellation).ConfigureAwait(false);
         }
-        catch (WhatsRpcException)
+        catch (InboxRpcException)
         {
             return null;
         }
