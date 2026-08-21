@@ -1,4 +1,4 @@
-using WhatsBox;
+using Inbox;
 
 namespace Tests;
 
@@ -55,3 +55,4 @@ public class JsonRpcFramingTests
         Assert.DoesNotContain("params", line);
     }
 }
+

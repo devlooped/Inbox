@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Inbox</RootNamespace>
+    <AssemblyName>Inbox</AssemblyName>
+    <Description>Managed reference client for an Inbox Protocol-implementation CLI (JSON-RPC 2.0, NDJSON over stdio).</Description>
+    <IsAotCompatible>true</IsAotCompatible>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Tests" />
+  </ItemGroup>
+</Project>

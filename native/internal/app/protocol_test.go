@@ -209,6 +209,44 @@ func (c *testClient) waitEvent(kind string, timeout time.Duration) map[string]an
 	return c.waitEventWhere(timeout, func(ev map[string]any) bool { return ev["kind"] == kind })
 }
 
+func eventContents(ev map[string]any) []map[string]any {
+	raw, ok := ev["contents"].([]any)
+	if !ok {
+		return nil
+	}
+	out := make([]map[string]any, 0, len(raw))
+	for _, x := range raw {
+		if m, ok := x.(map[string]any); ok {
+			out = append(out, m)
+		}
+	}
+	return out
+}
+
+func firstPart(ev map[string]any) map[string]any {
+	cs := eventContents(ev)
+	if len(cs) == 0 {
+		return nil
+	}
+	return cs[0]
+}
+
+func contentText(ev map[string]any) string {
+	var b strings.Builder
+	for _, p := range eventContents(ev) {
+		if p["type"] == "text" {
+			if s, ok := p["text"].(string); ok {
+				b.WriteString(s)
+			}
+		}
+	}
+	return b.String()
+}
+
+func textContents(text string) []map[string]any {
+	return []map[string]any{{"type": "text", "text": text}}
+}
+
 func (c *testClient) waitEventWhere(timeout time.Duration, pred func(map[string]any) bool) map[string]any {
 	c.t.Helper()
 	deadline := time.Now().Add(timeout)
@@ -307,6 +345,13 @@ func TestNotInitializedAndAlreadyInitialized(t *testing.T) {
 	}
 	if res["version"] != "0.1" {
 		t.Fatalf("version=%v", res["version"])
+	}
+	if res["product"] != "whatsapp" || res["identity"] != "user" {
+		t.Fatalf("product/identity=%v %v", res["product"], res["identity"])
+	}
+	caps, _ := res["capabilities"].(map[string]any)
+	if caps["reply"] != "quote" || caps["read"] != "message" || caps["attachments"] != "single" {
+		t.Fatalf("capabilities=%v", caps)
 	}
 	topics := asStrings(res["topics"])
 	if !contains(topics, "$session") {
@@ -678,8 +723,8 @@ func TestEventIdentityFields(t *testing.T) {
 	_ = c.waitEvent("ready", 3*time.Second)
 
 	fake.Inject(wa.Event{Type: wa.EvtMessage, Chat: "999@lid", ID: "t1", Sender: "999@lid", Kind: "text", Text: "hello"})
-	txt := c.waitEvent("text", time.Second)
-	if txt["id"] != "t1" {
+	txt := c.waitEvent("message", time.Second)
+	if txt["id"] != "t1" || contentText(txt) != "hello" {
 		t.Fatalf("text=%v", txt)
 	}
 	if _, ok := txt["pn"]; ok {
@@ -691,7 +736,7 @@ func TestEventIdentityFields(t *testing.T) {
 
 	fake.Inject(wa.Event{Type: wa.EvtMessage, Chat: "12036342@g.us", ID: "g1", Sender: "999@lid", Kind: "text", Text: "hi team"})
 	gt := c.waitEventWhere(time.Second, func(ev map[string]any) bool {
-		return ev["kind"] == "text" && ev["id"] == "g1"
+		return ev["kind"] == "message" && ev["id"] == "g1"
 	})
 	if gt["topicName"] != "Team" {
 		t.Fatalf("group topicName=%v", gt["topicName"])
@@ -701,7 +746,7 @@ func TestEventIdentityFields(t *testing.T) {
 		Kind: "text", Text: "from bob", Name: "Bob",
 	})
 	g2 := c.waitEventWhere(time.Second, func(ev map[string]any) bool {
-		return ev["kind"] == "text" && ev["id"] == "g2"
+		return ev["kind"] == "message" && ev["id"] == "g2"
 	})
 	if g2["topicName"] != "Team" {
 		t.Fatalf("group subject must not become the sender push name: %v", g2)
@@ -719,7 +764,7 @@ func TestEventIdentityFields(t *testing.T) {
 
 	fake.Inject(wa.Event{Type: wa.EvtMessage, Chat: "999@lid", ID: "m1", Sender: "111@lid", FromMe: true, Kind: "text", Text: "from me"})
 	mine := c.waitEventWhere(time.Second, func(ev map[string]any) bool {
-		return ev["kind"] == "text" && ev["id"] == "m1"
+		return ev["kind"] == "message" && ev["id"] == "m1"
 	})
 	if mine["by"] != "me" {
 		t.Fatalf("from-me by=%v", mine["by"])
@@ -739,7 +784,7 @@ func TestEventIdentityFields(t *testing.T) {
 		FromMe: true, Kind: "text", Text: "yo", Name: "MeName", PN: "15551234567@s.whatsapp.net",
 	})
 	_ = c.waitEventWhere(time.Second, func(ev map[string]any) bool {
-		return ev["kind"] == "text" && ev["id"] == "m2"
+		return ev["kind"] == "message" && ev["id"] == "m2"
 	})
 	ada := c.mustCall("directory.get", map[string]any{"id": "999@lid"})
 	if ada["name"] != "Ada" {
@@ -794,7 +839,7 @@ func TestRemapMovesPNSubscription(t *testing.T) {
 		Type: wa.EvtMessage, Chat: "15551234567@s.whatsapp.net",
 		ID: "m1", Sender: "999@lid", Kind: "text", Text: "hi",
 	})
-	ev := c.waitEvent("text", 2*time.Second)
+	ev := c.waitEvent("message", 2*time.Second)
 	if ev["topic"] != "999@lid" {
 		t.Fatalf("chat event topic=%v", ev["topic"])
 	}
@@ -863,28 +908,30 @@ func TestChatEventsDiscardOverflowSendRead(t *testing.T) {
 
 	// subscribed text / ack / meta / unknown / reaction
 	fake.Inject(wa.Event{Type: wa.EvtMessage, Chat: "999@lid", ID: "t1", Sender: "999@lid", Kind: "text", Text: "hello"})
-	txt := c.waitEvent("text", time.Second)
-	if txt["by"] != "999@lid" || txt["id"] != "t1" || txt["text"] != "hello" {
+	txt := c.waitEvent("message", time.Second)
+	if txt["by"] != "999@lid" || txt["id"] != "t1" || contentText(txt) != "hello" {
 		t.Fatalf("text=%v", txt)
 	}
 	fake.Inject(wa.Event{Type: wa.EvtReceipt, Chat: "999@lid", IDs: []string{"t1"}, Ack: "read"})
 	ack := c.waitEvent("ack", time.Second)
-	if ack["ack"] != "read" {
+	if firstPart(ack)["ack"] != "read" {
 		t.Fatalf("ack=%v", ack)
 	}
 	fake.Inject(wa.Event{Type: wa.EvtMeta, Chat: "12036342@g.us", Action: "rename", Name: "New"})
 	meta := c.waitEvent("meta", time.Second)
-	if meta["action"] != "rename" {
+	if firstPart(meta)["action"] != "rename" {
 		t.Fatalf("meta=%v", meta)
 	}
 	fake.Inject(wa.Event{Type: wa.EvtMessage, Chat: "999@lid", ID: "u1", Sender: "999@lid", Kind: "unknown", Label: "poll"})
-	unk := c.waitEvent("unknown", time.Second)
-	if unk["label"] != "poll" {
+	unk := c.waitEventWhere(time.Second, func(ev map[string]any) bool {
+		return ev["kind"] == "message" && ev["id"] == "u1"
+	})
+	if firstPart(unk)["label"] != "poll" {
 		t.Fatalf("unknown=%v", unk)
 	}
 	fake.Inject(wa.Event{Type: wa.EvtMessage, Chat: "999@lid", ID: "r1", Sender: "999@lid", Kind: "reaction", Emoji: "👍", Target: "t1"})
 	re := c.waitEvent("reaction", time.Second)
-	if re["emoji"] != "👍" || re["target"] != "t1" {
+	if firstPart(re)["emoji"] != "👍" || firstPart(re)["target"] != "t1" {
 		t.Fatalf("reaction=%v", re)
 	}
 
@@ -900,24 +947,24 @@ func TestChatEventsDiscardOverflowSendRead(t *testing.T) {
 	}
 
 	// send text + echo
-	sent := c.mustCall("messages.send", map[string]any{"to": "999@lid", "text": "yo"})
+	sent := c.mustCall("messages.send", map[string]any{"to": "999@lid", "contents": textContents("yo")})
 	if sent["topic"] != "999@lid" || sent["id"] == "" {
 		t.Fatalf("send=%v", sent)
 	}
 	me := c.waitEventWhere(time.Second, func(ev map[string]any) bool {
-		return ev["kind"] == "text" && ev["by"] == "me" && ev["id"] == sent["id"]
+		return ev["kind"] == "message" && ev["by"] == "me" && ev["id"] == sent["id"]
 	})
-	if me["by"] != "me" {
-		t.Fatalf("me event by=%v", me["by"])
+	if me["by"] != "me" || contentText(me) != "yo" {
+		t.Fatalf("me event=%v", me)
 	}
 
 	// reply / react validation
-	_, err := c.call("messages.send", map[string]any{"to": "999@lid", "reply": map[string]any{"id": "t1"}})
+	_, err := c.call("messages.send", map[string]any{"to": "999@lid", "contents": textContents("x"), "reply": map[string]any{"id": "t1"}})
 	if err == nil || err.Message != rpc.TokInvalidParams {
 		t.Fatalf("reply missing by: %#v", err)
 	}
 	quoted := c.mustCall("messages.send", map[string]any{
-		"to": "999@lid", "text": "obvio que anda",
+		"to": "999@lid", "contents": textContents("obvio que anda"),
 		"reply": map[string]any{"id": "3EB0", "by": "me", "text": "anda?"},
 	})
 	if quoted["id"] == "" {
@@ -938,7 +985,7 @@ func TestChatEventsDiscardOverflowSendRead(t *testing.T) {
 		t.Fatal("expected SendText with reply stub")
 	}
 	groupQuote := c.mustCall("messages.send", map[string]any{
-		"to": "12036342@g.us", "text": "quoted in group",
+		"to": "12036342@g.us", "contents": textContents("quoted in group"),
 		"reply": map[string]any{"id": "g1", "by": "me", "text": "hello"},
 	})
 	if groupQuote["id"] == "" {
@@ -963,7 +1010,8 @@ func TestChatEventsDiscardOverflowSendRead(t *testing.T) {
 		t.Fatalf("empty send: %#v", err)
 	}
 	reac := c.mustCall("messages.send", map[string]any{
-		"to": "999@lid", "react": map[string]any{"id": "t1", "by": "999@lid", "emoji": ""},
+		"to": "999@lid",
+		"contents": []map[string]any{{"type": "reaction", "target": "t1", "by": "999@lid", "emoji": ""}},
 	})
 	if reac["id"] == "" {
 		t.Fatalf("react result=%v", reac)
@@ -976,13 +1024,35 @@ func TestChatEventsDiscardOverflowSendRead(t *testing.T) {
 	if err := os.WriteFile(photo, []byte("JPEG"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	media := c.mustCall("messages.send", map[string]any{"to": "999@lid", "path": "out/photo.jpg"})
+	media := c.mustCall("messages.send", map[string]any{
+		"to": "999@lid",
+		"contents": []map[string]any{{"type": "image", "path": "out/photo.jpg"}},
+	})
 	if media["topic"] != "999@lid" {
 		t.Fatalf("path send=%v", media)
 	}
-	_, err = c.call("messages.send", map[string]any{"to": "999@lid", "path": "../secret.jpg"})
+	_, err = c.call("messages.send", map[string]any{
+		"to": "999@lid",
+		"contents": []map[string]any{{"type": "image", "path": "../secret.jpg"}},
+	})
 	if err == nil || err.Message != rpc.TokPathEscape {
 		t.Fatalf("path_escape: %#v", err)
+	}
+	_, err = c.call("messages.send", map[string]any{
+		"to": "999@lid",
+		"contents": []map[string]any{
+			{"type": "image", "path": "out/photo.jpg"},
+			{"type": "image", "path": "out/photo.jpg"},
+		},
+	})
+	if err == nil || err.Message != rpc.TokUnsupported {
+		t.Fatalf("extra blob: %#v", err)
+	}
+	if err != nil {
+		data, _ := err.Data.(map[string]any)
+		if data["capability"] != "attachments" {
+			t.Fatalf("unsupported data=%v", err.Data)
+		}
 	}
 
 	// inbound media: download via Client.Download, then write-then-notify
@@ -992,10 +1062,10 @@ func TestChatEventsDiscardOverflowSendRead(t *testing.T) {
 		Kind: "image", MediaRef: wa.MediaBlob{Key: "img1", Data: []byte("IMAGEDATA")}, MediaExt: ".jpg",
 	})
 	img := c.waitEventWhere(2*time.Second, func(ev map[string]any) bool {
-		return ev["kind"] == "image" && ev["id"] == "img1"
+		return ev["kind"] == "message" && ev["id"] == "img1"
 	})
-	rel, _ := img["path"].(string)
-	if rel == "" || !strings.HasPrefix(rel, "in/") {
+	rel, _ := firstPart(img)["path"].(string)
+	if firstPart(img)["type"] != "image" || rel == "" || !strings.HasPrefix(rel, "in/") {
 		t.Fatalf("inbound path=%v", img)
 	}
 	abs := filepath.Join(c.files, filepath.FromSlash(rel))
@@ -1013,9 +1083,11 @@ func TestChatEventsDiscardOverflowSendRead(t *testing.T) {
 		Type: wa.EvtMessage, Chat: "999@lid", ID: "vo1", Sender: "999@lid",
 		Kind: "image", ViewOnce: true, MediaRef: wa.MediaBlob{Key: "vo1", Data: []byte("VO")}, MediaExt: ".jpg",
 	})
-	vo := c.waitEvent("unknown", 2*time.Second)
-	if vo["path"] != nil {
-		t.Fatalf("view-once wrote path: %v", vo)
+	vo := c.waitEventWhere(2*time.Second, func(ev map[string]any) bool {
+		return ev["kind"] == "message" && ev["id"] == "vo1"
+	})
+	if firstPart(vo)["type"] != "unknown" || firstPart(vo)["label"] != "view_once" || firstPart(vo)["path"] != nil {
+		t.Fatalf("view-once=%v", vo)
 	}
 	if matches, _ := filepath.Glob(filepath.Join(c.files, "in", "*", "vo1*")); len(matches) != 0 {
 		t.Fatalf("view-once file written: %v", matches)
@@ -1024,27 +1096,37 @@ func TestChatEventsDiscardOverflowSendRead(t *testing.T) {
 		t.Fatalf("view-once must not download, got %d", fake.DownloadCount())
 	}
 
-	// group read without by
+	// read without by (1:1 and groups)
 	_, err = c.call("messages.read", map[string]any{"to": "12036342@g.us", "ids": []string{"t1"}})
 	if err == nil || err.Message != rpc.TokInvalidParams {
 		t.Fatalf("group read without by: %#v", err)
+	}
+	_, err = c.call("messages.read", map[string]any{"to": "999@lid", "ids": []string{"t1"}})
+	if err == nil || err.Message != rpc.TokInvalidParams {
+		t.Fatalf("1:1 read without by: %#v", err)
 	}
 	rd := c.mustCall("messages.read", map[string]any{"to": "12036342@g.us", "ids": []string{"t1"}, "by": "999@lid"})
 	if rd["topic"] != "12036342@g.us" {
 		t.Fatalf("read=%v", rd)
 	}
-	rd1 := c.mustCall("messages.read", map[string]any{"to": "999@lid", "ids": []string{"t1"}})
+	if n := len(fake.ReadCalls); n < 1 || fake.ReadCalls[n-1].Sender != "999@lid" {
+		t.Fatalf("group MarkRead sender=%v", fake.ReadCalls)
+	}
+	rd1 := c.mustCall("messages.read", map[string]any{"to": "999@lid", "ids": []string{"t1"}, "by": "999@lid"})
 	if rd1["topic"] != "999@lid" {
 		t.Fatalf("1:1 read=%v", rd1)
+	}
+	if n := len(fake.ReadCalls); n < 1 || fake.ReadCalls[n-1].Sender != "" {
+		t.Fatalf("1:1 MarkRead should ignore by, sender=%v", fake.ReadCalls)
 	}
 
 	// disconnected
 	_ = c.mustCall("session.disconnect", nil)
-	_, err = c.call("messages.send", map[string]any{"to": "999@lid", "text": "x"})
+	_, err = c.call("messages.send", map[string]any{"to": "999@lid", "contents": textContents("x")})
 	if err == nil || err.Message != rpc.TokDisconnected {
 		t.Fatalf("send offline: %#v", err)
 	}
-	_, err = c.call("messages.read", map[string]any{"to": "999@lid", "ids": []string{"t1"}})
+	_, err = c.call("messages.read", map[string]any{"to": "999@lid", "ids": []string{"t1"}, "by": "999@lid"})
 	if err == nil || err.Message != rpc.TokDisconnected {
 		t.Fatalf("read offline: %#v", err)
 	}
@@ -1055,7 +1137,10 @@ func TestFilesRequiredOnSendPath(t *testing.T) {
 	fake.SetPaired("111@lid")
 	c := startDaemon(t, fake, 0)
 	_ = c.mustInit(map[string]any{"connect": true})
-	_, err := c.call("messages.send", map[string]any{"to": "999@lid", "path": "out/a.jpg"})
+	_, err := c.call("messages.send", map[string]any{
+		"to": "999@lid",
+		"contents": []map[string]any{{"type": "image", "path": "out/a.jpg"}},
+	})
 	if err == nil || err.Message != rpc.TokFilesRequired {
 		t.Fatalf("want files_required, got %#v", err)
 	}
@@ -1065,10 +1150,10 @@ func TestFilesRequiredOnSendPath(t *testing.T) {
 		Kind: "image", MediaRef: wa.MediaBlob{Key: "nf1", Data: []byte("N")}, MediaExt: ".jpg",
 	})
 	img := c.waitEventWhere(2*time.Second, func(ev map[string]any) bool {
-		return ev["kind"] == "image" && ev["id"] == "nf1"
+		return ev["kind"] == "message" && ev["id"] == "nf1"
 	})
-	if img["path"] != nil {
-		t.Fatalf("no-files inbound wrote path: %v", img)
+	if firstPart(img)["path"] != nil || firstPart(img)["error"] != "files_required" {
+		t.Fatalf("no-files inbound: %v", img)
 	}
 	if fake.DownloadCount() != 0 {
 		t.Fatalf("no-files inbound must not download, got %d", fake.DownloadCount())

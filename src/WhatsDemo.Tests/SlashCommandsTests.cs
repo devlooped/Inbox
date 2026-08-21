@@ -124,7 +124,7 @@ public class UnsubscribeCompletionsTests
         var book = new DirectoryBook();
         book.Remember("me@lid", "@danielkzu", "Kzu");
         book.Remember("111@lid", "@ada", "Ada");
-        book.Remember(new WhatsBox.DirectoryRow
+        book.Remember(new Inbox.DirectoryRow
         {
             Topic = "12036342@g.us",
             Kind = "group",
@@ -150,7 +150,7 @@ public class UnsubscribeCompletionsTests
     {
         var book = new DirectoryBook();
         book.Remember("111@lid", "@ada", "Ada");
-        book.Remember(new WhatsBox.DirectoryRow
+        book.Remember(new Inbox.DirectoryRow
         {
             Topic = "12036342@g.us",
             Kind = "group",

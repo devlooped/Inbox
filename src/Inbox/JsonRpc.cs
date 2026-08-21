@@ -1,7 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
 
-namespace WhatsBox;
+namespace Inbox;
 
 /// <summary>NDJSON JSON-RPC 2.0 request envelope (no <c>params</c>).</summary>
 sealed class JsonRpcRequest
@@ -25,8 +25,8 @@ static class JsonRpc
 {
     public const string Version = "2.0";
 
-    /// <summary>AOT-safe options backed by <see cref="WhatsJsonContext"/>.</summary>
-    public static JsonSerializerOptions SerializerOptions => WhatsJsonContext.Default.Options;
+    /// <summary>AOT-safe options backed by <see cref="InboxJsonContext"/>.</summary>
+    public static JsonSerializerOptions SerializerOptions => InboxJsonContext.Default.Options;
 
     public static bool TryParse(string line, out JsonRpcMessage message)
     {
@@ -107,3 +107,4 @@ readonly record struct JsonRpcMessage(
 }
 
 readonly record struct JsonRpcError(int Code, string Message, JsonElement? Data);
+

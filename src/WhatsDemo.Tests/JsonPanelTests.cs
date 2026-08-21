@@ -1,5 +1,5 @@
 using System.Text.Json;
-using WhatsBox;
+using Inbox;
 
 namespace WhatsDemo.Tests;
 
@@ -10,7 +10,7 @@ public class JsonPanelTests
     {
         var panel = JsonPanel.Render(
             new TopicsResult { Topics = ["$session", "111@lid"] },
-            WhatsJsonContext.Default.TopicsResult);
+            InboxJsonContext.Default.TopicsResult);
 
         Assert.StartsWith("┌", panel);
         Assert.EndsWith("┘", panel);
@@ -31,7 +31,7 @@ public class JsonPanelTests
     {
         var panel = JsonPanel.Render(
             new DirectoryRow { Topic = "111@lid", Kind = "user", Name = "Ada" },
-            WhatsJsonContext.Default.DirectoryRow);
+            InboxJsonContext.Default.DirectoryRow);
 
         Assert.Contains("\"topic\": \"111@lid\"", panel);
         Assert.Contains("\"kind\": \"user\"", panel);
@@ -45,7 +45,7 @@ public class JsonPanelTests
     {
         var panel = JsonPanel.Render(
             new DirectoryRow { Topic = "111@lid", Kind = "user", Name = "Analía Carvallo" },
-            WhatsJsonContext.Default.DirectoryRow);
+            InboxJsonContext.Default.DirectoryRow);
 
         Assert.Contains("Analía Carvallo", panel);
         Assert.DoesNotContain("\\u00ED", panel);

@@ -361,10 +361,25 @@ func (d *Daemon) resolveStore(param string) (string, *rpc.Error) {
 }
 
 type statusResult struct {
-	Version string   `json:"version,omitempty"`
-	Status  string   `json:"status"`
-	Me      string   `json:"me,omitempty"`
-	Topics  []string `json:"topics"`
+	Version      string         `json:"version,omitempty"`
+	Status       string         `json:"status"`
+	Me           string         `json:"me,omitempty"`
+	Topics       []string       `json:"topics"`
+	Product      string         `json:"product"`
+	Identity     string         `json:"identity"`
+	Capabilities map[string]any `json:"capabilities"`
+}
+
+func boxCapabilities() map[string]any {
+	return map[string]any{
+		"auth":        []string{"qr"},
+		"reply":       "quote",
+		"react":       true,
+		"read":        "message",
+		"ack":         true,
+		"files":       true,
+		"attachments": "single",
+	}
 }
 
 func (d *Daemon) sessionStatus() statusResult {
@@ -383,9 +398,12 @@ func (d *Daemon) statusSnapshot(withVersion bool) statusResult {
 		me = ""
 	}
 	res := statusResult{
-		Status: st,
-		Me:     me,
-		Topics: d.bus.Topics(),
+		Status:       st,
+		Me:           me,
+		Topics:       d.bus.Topics(),
+		Product:      "whatsapp",
+		Identity:     "user",
+		Capabilities: boxCapabilities(),
 	}
 	if withVersion {
 		res.Version = rpc.Version

@@ -87,9 +87,6 @@ func (d *Daemon) handleMessage(ev wa.Event) {
 	if kind == "" {
 		kind = "text"
 	}
-	if ev.ViewOnce {
-		kind = "unknown"
-	}
 
 	by := "me"
 	if !ev.FromMe {
@@ -106,73 +103,94 @@ func (d *Daemon) handleMessage(ev wa.Event) {
 
 	out := map[string]any{
 		"topic": chat,
-		"kind":  kind,
 		"id":    ev.ID,
 		"by":    by,
 	}
 	d.decorateChat(out, chat, by, ev.Name)
 
-	switch kind {
-	case "text":
-		out["text"] = ev.Text
-	case "image", "video", "audio", "document", "sticker":
-		if ev.Text != "" {
-			out["text"] = ev.Text
+	if kind == "reaction" {
+		out["kind"] = "reaction"
+		out["contents"] = []map[string]any{{
+			"type":   "reaction",
+			"emoji":  ev.Emoji,
+			"target": ev.Target,
+		}}
+		d.touchDirectoryFromMessage(ev, chat)
+		d.emit(out)
+		return
+	}
+
+	out["kind"] = "message"
+	var parts []map[string]any
+	if ev.ViewOnce {
+		label := ev.Label
+		if label == "" {
+			label = "view_once"
 		}
-		fd := d.filesDir()
-		if ev.ViewOnce || !fd.Enabled() {
+		parts = []map[string]any{{"type": "unknown", "label": label}}
+	} else {
+		switch kind {
+		case "text":
+			parts = []map[string]any{{"type": "text", "text": ev.Text}}
+		case "image", "video", "audio", "document", "sticker":
+			part := map[string]any{"type": kind}
+			fd := d.filesDir()
 			if !fd.Enabled() {
-				out["error"] = "files_required"
+				part["error"] = "files_required"
+			} else {
+				data := ev.Media
+				if ev.MediaRef != nil {
+					cli := d.client()
+					if cli == nil {
+						part["error"] = "download_failed"
+					} else {
+						got, err := cli.Download(context.Background(), ev.MediaRef)
+						if err != nil {
+							part["error"] = "download_failed"
+						} else {
+							data = got
+						}
+					}
+				}
+				if part["error"] == nil {
+					if len(data) == 0 {
+						part["error"] = "download_failed"
+					} else {
+						ext := ev.MediaExt
+						if ext == "" {
+							ext = files.ExtForMIME(ev.MIME, "")
+						}
+						rel, err := fd.WriteInbound(chat, ev.ID, ext, data)
+						if err != nil {
+							part["error"] = err.Error()
+						} else {
+							part["path"] = rel
+						}
+					}
+				}
 			}
-			break
-		}
-		data := ev.Media
-		if ev.MediaRef != nil {
-			cli := d.client()
-			if cli == nil {
-				out["error"] = "download_failed"
-				break
+			parts = []map[string]any{part}
+			if ev.Text != "" {
+				parts = append(parts, map[string]any{"type": "text", "text": ev.Text})
 			}
-			got, err := cli.Download(context.Background(), ev.MediaRef)
-			if err != nil {
-				out["error"] = "download_failed"
-				break
+		case "location":
+			loc := map[string]any{"type": "location", "lat": ev.Lat, "lng": ev.Lng}
+			if ev.LocName != "" {
+				loc["name"] = ev.LocName
 			}
-			data = got
-		}
-		if len(data) == 0 {
-			out["error"] = "download_failed"
-			break
-		}
-		ext := ev.MediaExt
-		if ext == "" {
-			ext = files.ExtForMIME(ev.MIME, "")
-		}
-		rel, err := fd.WriteInbound(chat, ev.ID, ext, data)
-		if err != nil {
-			out["error"] = err.Error()
-		} else {
-			out["path"] = rel
-		}
-	case "location":
-		out["lat"] = ev.Lat
-		out["lng"] = ev.Lng
-		if ev.LocName != "" {
-			out["name"] = ev.LocName
-		}
-		if ev.LocAddr != "" {
-			out["address"] = ev.LocAddr
-		}
-	case "reaction":
-		out["emoji"] = ev.Emoji
-		out["target"] = ev.Target
-	case "unknown":
-		if ev.Label != "" {
-			out["label"] = ev.Label
-		} else if ev.ViewOnce {
-			out["label"] = "view_once"
+			if ev.LocAddr != "" {
+				loc["address"] = ev.LocAddr
+			}
+			parts = []map[string]any{loc}
+		default:
+			unk := map[string]any{"type": "unknown"}
+			if ev.Label != "" {
+				unk["label"] = ev.Label
+			}
+			parts = []map[string]any{unk}
 		}
 	}
+	out["contents"] = parts
 	d.touchDirectoryFromMessage(ev, chat)
 	d.emit(out)
 }
@@ -189,8 +207,11 @@ func (d *Daemon) handleReceipt(ev wa.Event) {
 	out := map[string]any{
 		"topic": chat,
 		"kind":  "ack",
-		"ids":   ev.IDs,
-		"ack":   ack,
+		"contents": []map[string]any{{
+			"type": "ack",
+			"ids":  ev.IDs,
+			"ack":  ack,
+		}},
 	}
 	d.decorateChat(out, chat, "", "")
 	d.emit(out)
@@ -202,13 +223,14 @@ func (d *Daemon) handleMeta(ev wa.Event) {
 		return
 	}
 	if d.bus.Has(chat) {
-		m := map[string]any{
-			"topic":  chat,
-			"kind":   "meta",
-			"action": ev.Action,
-		}
+		part := map[string]any{"type": "meta", "action": ev.Action}
 		if ev.Name != "" {
-			m["name"] = ev.Name
+			part["name"] = ev.Name
+		}
+		m := map[string]any{
+			"topic":    chat,
+			"kind":     "meta",
+			"contents": []map[string]any{part},
 		}
 		by := ""
 		if ev.Sender != "" {

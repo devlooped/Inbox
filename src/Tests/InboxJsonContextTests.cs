@@ -1,16 +1,18 @@
 using System.Text.Json;
-using WhatsBox;
+using Inbox;
 
 namespace Tests;
 
-public class WhatsJsonContextTests
+public class InboxJsonContextTests
 {
     [Fact]
     public void Default_options_use_source_generated_resolver()
     {
-        Assert.Same(WhatsJsonContext.Default, JsonRpc.SerializerOptions.TypeInfoResolver);
-        Assert.NotNull(WhatsJsonContext.Default.ChatMessage);
-        Assert.NotNull(WhatsJsonContext.Default.SessionSnapshot);
+        Assert.Same(InboxJsonContext.Default, JsonRpc.SerializerOptions.TypeInfoResolver);
+        Assert.NotNull(InboxJsonContext.Default.ChatEvent);
+        Assert.NotNull(InboxJsonContext.Default.ChatMessage);
+        Assert.NotNull(InboxJsonContext.Default.ContentPart);
+        Assert.NotNull(InboxJsonContext.Default.SessionSnapshot);
         Assert.NotNull(JsonRpcContext.Default.JsonRpcRequest);
         Assert.NotNull(JsonRpcContext.Default.JsonRpcRequestInitializeOptions);
     }
@@ -55,16 +57,22 @@ public class WhatsJsonContextTests
     [Fact]
     public void SessionSnapshot_round_trips_through_context()
     {
-        var json = """{"status":"new","topics":["$session"],"version":"0.1"}""";
-        var snap = JsonSerializer.Deserialize(json, WhatsJsonContext.Default.SessionSnapshot);
+        var json = """{"status":"new","topics":["$session"],"version":"0.1","product":"whatsapp","identity":"user","capabilities":{"auth":["qr"],"reply":"quote","react":true,"read":"message","ack":true,"files":true,"attachments":"single"}}""";
+        var snap = JsonSerializer.Deserialize(json, InboxJsonContext.Default.SessionSnapshot);
         Assert.NotNull(snap);
         Assert.Equal("new", snap.Status);
         Assert.Equal(["$session"], snap.Topics);
         Assert.Equal("0.1", snap.Version);
+        Assert.Equal("whatsapp", snap.Product);
+        Assert.Equal("user", snap.Identity);
+        Assert.NotNull(snap.Capabilities);
+        Assert.Equal("quote", snap.Capabilities.Reply);
+        Assert.Equal("single", snap.Capabilities.Attachments);
 
-        var back = JsonSerializer.Serialize(snap, WhatsJsonContext.Default.SessionSnapshot);
+        var back = JsonSerializer.Serialize(snap, InboxJsonContext.Default.SessionSnapshot);
         using var doc = JsonDocument.Parse(back);
         Assert.Equal("new", doc.RootElement.GetProperty("status").GetString());
         Assert.False(doc.RootElement.TryGetProperty("self", out _));
     }
 }
+

@@ -95,8 +95,15 @@ public class WhatsBoxPackTests
     public void Pointer_and_rid_csproj_use_calc_pack_split()
     {
         var repo = FindRepoRoot();
+        var slnx = File.ReadAllText(Path.Combine(repo, "WhatsBox.slnx"));
+        Assert.Contains("src/Inbox/Inbox.csproj", slnx);
+        var inbox = File.ReadAllText(Path.Combine(repo, "src", "Inbox", "Inbox.csproj"));
+        Assert.Contains("<AssemblyName>Inbox</AssemblyName>", inbox);
+        Assert.Contains("<RootNamespace>Inbox</RootNamespace>", inbox);
+        Assert.DoesNotContain("whatsbox.exe", inbox, StringComparison.OrdinalIgnoreCase);
         var csproj = File.ReadAllText(Path.Combine(repo, "src", "WhatsBox", "WhatsBox.csproj"));
         Assert.Contains("<PackageId>WhatsBox</PackageId>", csproj);
+        Assert.Contains(@"..\Inbox\Inbox.csproj", csproj);
         Assert.Contains("WhatsBox.$(RuntimeIdentifier)", csproj);
         Assert.Contains("<IncludeBuildOutput Condition=\"'$(RuntimeIdentifier)' == ''\">true</IncludeBuildOutput>", csproj);
         Assert.Contains("<IncludeBuildOutput Condition=\"'$(RuntimeIdentifier)' != ''\">false</IncludeBuildOutput>", csproj);

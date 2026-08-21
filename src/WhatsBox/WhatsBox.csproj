@@ -5,7 +5,7 @@
     <PackageId Condition="'$(RuntimeIdentifier)' != ''">WhatsBox.$(RuntimeIdentifier)</PackageId>
     <RootNamespace>WhatsBox</RootNamespace>
     <AssemblyName>WhatsBox</AssemblyName>
-    <Description>Managed .NET host for the whatsbox WhatsApp companion. PackageReference WhatsBox and publish for your RID to get WhatsBox.dll plus the native whatsbox sidecar.</Description>
+    <Description>WhatsApp Inbox Protocol host: PackageReference WhatsBox and publish for your RID to get the native whatsbox sidecar plus the managed Inbox client.</Description>
     <IsAotCompatible>true</IsAotCompatible>
     <RuntimeIdentifiers>win-x64;win-arm64;linux-x64;linux-arm64;osx-x64;osx-arm64</RuntimeIdentifiers>
     <IsPackable>true</IsPackable>
@@ -45,8 +45,21 @@
     <PackageReference Include="JsonPeek" Version="1.3.0" PrivateAssets="all" />
     <PackageReference Include="JsonPoke" Version="1.3.0" PrivateAssets="all" />
     <PackageReference Include="Readme" Version="1.2.1" PrivateAssets="all" />
+    <ProjectReference Include="..\Inbox\Inbox.csproj" PrivateAssets="all" />
     <InternalsVisibleTo Include="Tests" />
   </ItemGroup>
+
+  <PropertyGroup>
+    <TargetsForTfmSpecificBuildOutput>$(TargetsForTfmSpecificBuildOutput);PackInboxReferenceOutput</TargetsForTfmSpecificBuildOutput>
+  </PropertyGroup>
+
+  <Target Name="PackInboxReferenceOutput" DependsOnTargets="BuildOnlySettings;ResolveReferences" Condition="'$(RuntimeIdentifier)' == ''">
+    <ItemGroup>
+      <BuildOutputInPackage Include="@(ReferenceCopyLocalPaths)" Condition="'%(Filename)' == 'Inbox'">
+        <TargetPath>%(Filename)%(Extension)</TargetPath>
+      </BuildOutputInPackage>
+    </ItemGroup>
+  </Target>
 
   <!-- Build the current-OS whatsbox next to this project so project-reference copy lands it in the consumer outdir. -->
   <Target Name="BuildNativeWhatsBox" BeforeTargets="BeforeCompile;GetCopyToOutputDirectoryItems;AssignTargetPaths" Inputs="$(NativeWhatsBoxSourceRoot)\cmd\**\*.go;$(NativeWhatsBoxSourceRoot)\internal\**\*.go;$(NativeWhatsBoxSourceRoot)\go.mod;$(NativeWhatsBoxSourceRoot)\go.sum" Outputs="$(NativeWhatsBoxOutput)">

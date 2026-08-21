@@ -24,6 +24,7 @@ const (
 	CodePathEscape         = -32012
 	CodeInvalidParams      = -32013
 	CodeDisconnected       = -32014
+	CodeUnsupported        = -32015
 	CodeParseError         = -32700
 	CodeInvalidRequest     = -32600
 	CodeMethodNotFound     = -32601
@@ -44,6 +45,7 @@ const (
 	TokPathEscape         = "path_escape"
 	TokInvalidParams      = "invalid_params"
 	TokDisconnected       = "disconnected"
+	TokUnsupported        = "unsupported"
 	TokParseError         = "parse_error"
 	TokInvalidRequest     = "invalid_request"
 	TokMethodNotFound     = "method_not_found"
@@ -105,6 +107,7 @@ var tokenCode = map[string]int{
 	TokPathEscape:         CodePathEscape,
 	TokInvalidParams:      CodeInvalidParams,
 	TokDisconnected:       CodeDisconnected,
+	TokUnsupported:        CodeUnsupported,
 	TokParseError:         CodeParseError,
 	TokInvalidRequest:     CodeInvalidRequest,
 	TokMethodNotFound:     CodeMethodNotFound,
