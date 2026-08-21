@@ -65,30 +65,46 @@ static class EventMapper
         {
             "reaction" => new ChatReaction
             {
-                Topic = topic, Id = GetString(p, "id"), By = GetString(p, "by"),
-                Handle = GetString(p, "handle"), TopicName = GetString(p, "topicName"),
-                ByName = GetString(p, "byName"), Context = GetString(p, "context"),
+                Topic = topic,
+                Id = GetString(p, "id"),
+                By = GetString(p, "by"),
+                Handle = GetString(p, "handle"),
+                TopicName = GetString(p, "topicName"),
+                ByName = GetString(p, "byName"),
+                Context = GetString(p, "context"),
                 Contents = contents,
             },
             "ack" => new ChatAck
             {
-                Topic = topic, Id = GetString(p, "id"), By = GetString(p, "by"),
-                Handle = GetString(p, "handle"), TopicName = GetString(p, "topicName"),
-                ByName = GetString(p, "byName"), Context = GetString(p, "context"),
+                Topic = topic,
+                Id = GetString(p, "id"),
+                By = GetString(p, "by"),
+                Handle = GetString(p, "handle"),
+                TopicName = GetString(p, "topicName"),
+                ByName = GetString(p, "byName"),
+                Context = GetString(p, "context"),
                 Contents = contents,
             },
             "meta" => new ChatMeta
             {
-                Topic = topic, Id = GetString(p, "id"), By = GetString(p, "by"),
-                Handle = GetString(p, "handle"), TopicName = GetString(p, "topicName"),
-                ByName = GetString(p, "byName"), Context = GetString(p, "context"),
+                Topic = topic,
+                Id = GetString(p, "id"),
+                By = GetString(p, "by"),
+                Handle = GetString(p, "handle"),
+                TopicName = GetString(p, "topicName"),
+                ByName = GetString(p, "byName"),
+                Context = GetString(p, "context"),
                 Contents = contents,
             },
             _ => new ChatMessage
             {
-                Topic = topic, Id = GetString(p, "id"), By = GetString(p, "by"),
-                Handle = GetString(p, "handle"), TopicName = GetString(p, "topicName"),
-                ByName = GetString(p, "byName"), Context = GetString(p, "context"),
+                Topic = topic,
+                Id = GetString(p, "id"),
+                By = GetString(p, "by"),
+                Handle = GetString(p, "handle"),
+                TopicName = GetString(p, "topicName"),
+                ByName = GetString(p, "byName"),
+                Context = GetString(p, "context"),
                 Contents = contents,
             },
         };
