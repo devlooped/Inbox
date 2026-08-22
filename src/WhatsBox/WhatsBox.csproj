@@ -4,7 +4,7 @@
     <PackageId>WhatsBox</PackageId>
     <RootNamespace>WhatsBox</RootNamespace>
     <AssemblyName>WhatsBox</AssemblyName>
-    <Description>WhatsApp Inbox Protocol host: PackageReference WhatsBox and publish for your RID to get the native whatsbox sidecar plus the managed Inbox client.</Description>
+    <Description>WhatsApp Inbox Client Protocol (ICP) host: PackageReference WhatsBox and publish for your RID to get the native whatsbox sidecar plus the managed Inbox client.</Description>
     <IsAotCompatible>true</IsAotCompatible>
     <RuntimeIdentifiers>win-x64;win-arm64;linux-x64;linux-arm64;osx-x64;osx-arm64</RuntimeIdentifiers>
     <IsPackable>true</IsPackable>

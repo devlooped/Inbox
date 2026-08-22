@@ -2,7 +2,7 @@
 
 ### Issue tracker
 
-Issues live in GitHub Issues for `devlooped/whatsbox`. See `docs/agents/issue-tracker.md`.
+Issues live in GitHub Issues for `devlooped/Inbox`. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 

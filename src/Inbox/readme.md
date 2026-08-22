@@ -1,13 +1,11 @@
 The [`Inbox`](https://www.nuget.org/packages/Inbox) package is the managed
-**Inbox Protocol** client (`InboxClient`) plus non-transitive MSBuild targets
+**Inbox Client Protocol (ICP)** client (`InboxClient`) plus non-transitive MSBuild targets
 for adapters that ship a native sidecar.
-
-```xml
-<PackageReference Include="Inbox" Version="*" />
-```
 
 Apps that only want WhatsApp should PackageReference `WhatsBox` instead — these
 targets are **not** transitive.
+
+<!-- include ../../readme.md#inbox -->
 
 ## Adapter packing
 

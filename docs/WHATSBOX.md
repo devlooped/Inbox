@@ -1,17 +1,17 @@
 # WhatsBox
 
-WhatsBox is **an Inbox Protocol implementation for WhatsApp**.
+WhatsBox is the **WhatsApp adapter** for Inbox Client Protocol (ICP): native binary `whatsbox`, managed NuGet `WhatsBox`.
 
 **Status:** v0.1 (session-locked)  
 **License (product):** MIT  
 **Language:** Go  
 **Library:** [whatsmeow](https://github.com/tulir/whatsmeow)
 
-whatsbox is the **WhatsApp implementation** of [Inbox Protocol](INBOX.md): a local linked-device companion that owns one WhatsApp session and exposes it as a JSON-RPC 2.0 pub/sub bus over stdio.
+`whatsbox` is the native WhatsApp adapter in this Inbox repository: a local linked-device companion that owns one WhatsApp session and exposes it as a JSON-RPC 2.0 pub/sub bus over stdio. The `WhatsBox` NuGet is the managed host on top of that adapter.
 
 Wire, methods, events, files, errors, client-once rules, and capabilities are specified in **INBOX.md**. This document is the WhatsApp profile: how that envelope maps onto WhatsApp Web (LIDs, QR pairing, ContextInfo, HistorySync headers, store layout). It does **not** restate the method table.
 
-`external/whatsmeow` and `external/wacli` in this workspace are **reference only**; whatsbox is a greenfield repo and does not share databases, packages, or command surface with wacli.
+`external/whatsmeow` and `external/wacli` in this workspace are **reference only**; the adapter does not share databases, packages, or command surface with wacli.
 
 ---
 

@@ -1,11 +1,11 @@
-# Inbox Protocol
+# Inbox Client Protocol (ICP)
 
 **Status:** v0.1 (draft, session-locked with WhatsBox)  
 **Wire version:** `"0.1"`  
 **Transport:** JSON-RPC 2.0, NDJSON over stdio  
 **Reference profile:** WhatsApp / [`docs/WHATSBOX.md`](WHATSBOX.md)
 
-Inbox is a **single client-facing JSON-RPC 2.0 pub/sub bus** for local companion processes. One binary owns one messaging-product session and exposes it over stdin/stdout. Clients subscribe to chats and two system topics, send a small set of actions, and receive live events. It is **not** an archive, a search engine, or a product CLI.
+Inbox Client Protocol (**ICP**) is a **single client-facing JSON-RPC 2.0 pub/sub bus** for local companion processes. One binary owns one messaging-product session and exposes it over stdin/stdout. Clients subscribe to chats and two system topics, send a small set of actions, and receive live events. It is **not** an archive, a search engine, or a product CLI.
 
 A client implements the methods, events, store/files rules, and error tokens in this document **once**. Product differences appear only as:
 
@@ -1425,9 +1425,9 @@ Recommended for new unifying clients. Gateways MUST still ignore unknown `contex
 
 ## 23. Relationship to WhatsBox
 
-This document is the **protocol**. [`docs/WHATSBOX.md`](WHATSBOX.md) is the **WhatsApp profile**: store layout, LID canonicalization, HistorySync headers, ContextInfo `remoteJid`, group `MarkRead` participant, and the shipped `whatsbox` binary. It does not restate the method table, event envelope, or error tokens.
+This document is **Inbox Client Protocol (ICP)** (also the managed `Inbox` client). [`docs/WHATSBOX.md`](WHATSBOX.md) is the **WhatsApp profile** for the native `whatsbox` adapter in this Inbox repository: store layout, LID canonicalization, HistorySync headers, ContextInfo `remoteJid`, group `MarkRead` participant, and the shipped `whatsbox` binary. The `WhatsBox` NuGet is the managed host on top of that adapter. This spec does not restate the method table, event envelope, or error tokens.
 
-A `whatsbox` binary is a conformant Inbox Protocol implementation when it speaks this envelope (including `product`, `identity`, and `capabilities` on `initialize` / `session.status`) and maps WhatsApp as in WHATSBOX.md + RFC-1.
+A `whatsbox` binary is a conformant ICP implementation when it speaks this envelope (including `product`, `identity`, and `capabilities` on `initialize` / `session.status`) and maps WhatsApp as in WHATSBOX.md + RFC-1.
 
 Wire version stays **`"0.1"`** so one codec spans the family.
 

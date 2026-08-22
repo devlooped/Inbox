@@ -1,7 +1,7 @@
 namespace Tests;
 
 /// <summary>
-/// Structural checks on the shipped Inbox Protocol spec (<c>docs/INBOX.md</c>).
+/// Structural checks on the shipped Inbox Client Protocol (ICP) spec (<c>docs/INBOX.md</c>).
 /// The artifact is the spec; this test drives that file on disk, not a reimplementation.
 /// </summary>
 public class InboxProtocolSpecTests
@@ -30,7 +30,7 @@ public class InboxProtocolSpecTests
     public void Spec_is_non_empty_prose()
     {
         Assert.True(spec.Length > 8_000, $"spec too short: {spec.Length}");
-        Assert.Contains("# Inbox Protocol", spec, StringComparison.Ordinal);
+        Assert.Contains("# Inbox Client Protocol (ICP)", spec, StringComparison.Ordinal);
         Assert.Contains("JSON-RPC 2.0", spec, StringComparison.Ordinal);
     }
 

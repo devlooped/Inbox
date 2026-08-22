@@ -1,6 +1,6 @@
 <Project>
   <PropertyGroup>
-    <Product>whatsbox</Product>
+    <Product>Inbox</Product>
     <ImplicitUsings>true</ImplicitUsings>
   </PropertyGroup>
 </Project>
