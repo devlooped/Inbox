@@ -10,8 +10,8 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/devlooped/whatsbox/internal/rpc"
-	"github.com/devlooped/whatsbox/internal/wa"
+	"github.com/devlooped/whatsbox/rpc"
+	"github.com/devlooped/whatsbox/wa"
 )
 
 const (
@@ -101,7 +101,10 @@ func mustAbs(p string) string {
 	return abs
 }
 
-func writeLine(w io.Writer, mu interface{ Lock(); Unlock() }, line []byte) error {
+func writeLine(w io.Writer, mu interface {
+	Lock()
+	Unlock()
+}, line []byte) error {
 	mu.Lock()
 	defer mu.Unlock()
 	if _, err := w.Write(line); err != nil {

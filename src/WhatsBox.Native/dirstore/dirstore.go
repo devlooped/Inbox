@@ -12,7 +12,7 @@ import (
 
 	_ "modernc.org/sqlite"
 
-	"github.com/devlooped/whatsbox/internal/sqliteutil"
+	"github.com/devlooped/whatsbox/sqliteutil"
 )
 
 type Store struct {

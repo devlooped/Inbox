@@ -4,9 +4,9 @@ import (
 	"context"
 	"strings"
 
-	"github.com/devlooped/whatsbox/internal/rpc"
-	"github.com/devlooped/whatsbox/internal/topic"
-	"github.com/devlooped/whatsbox/internal/wa"
+	"github.com/devlooped/whatsbox/rpc"
+	"github.com/devlooped/whatsbox/topic"
+	"github.com/devlooped/whatsbox/wa"
 )
 
 func (d *Daemon) resolveTopic(ctx context.Context, raw string, allowSystem bool) (string, *rpc.Error) {

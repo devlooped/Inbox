@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"github.com/devlooped/whatsbox/internal/app"
+	"github.com/devlooped/whatsbox/app"
 )
 
 func main() {
