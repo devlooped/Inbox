@@ -1,48 +1,48 @@
 # Changelog
 
-## [v0.1.5](https://github.com/devlooped/whatsbox/tree/v0.1.5) (2026-08-20)
+## [v0.1.5](https://github.com/devlooped/Inbox/tree/v0.1.5) (2026-08-20)
 
-[Full Changelog](https://github.com/devlooped/whatsbox/compare/v0.1.4...v0.1.5)
+[Full Changelog](https://github.com/devlooped/Inbox/compare/v0.1.4...v0.1.5)
 
 :sparkles: Implemented enhancements:
 
-- Subscribe is JID-only; fix directory identity and reply quotes [\#10](https://github.com/devlooped/whatsbox/pull/10) (@kzu)
+- Subscribe is JID-only; fix directory identity and reply quotes [\#10](https://github.com/devlooped/Inbox/pull/10) (@kzu)
 
 :twisted_rightwards_arrows: Merged:
 
-- Pack WhatsDemo as the wd tool with pointer and RID packages [\#12](https://github.com/devlooped/whatsbox/pull/12) (@kzu)
+- Pack WhatsDemo as the wd tool with pointer and RID packages [\#12](https://github.com/devlooped/Inbox/pull/12) (@kzu)
 
-## [v0.1.4](https://github.com/devlooped/whatsbox/tree/v0.1.4) (2026-08-19)
+## [v0.1.4](https://github.com/devlooped/Inbox/tree/v0.1.4) (2026-08-19)
 
-[Full Changelog](https://github.com/devlooped/whatsbox/compare/v0.1.3...v0.1.4)
+[Full Changelog](https://github.com/devlooped/Inbox/compare/v0.1.3...v0.1.4)
 
-## [v0.1.3](https://github.com/devlooped/whatsbox/tree/v0.1.3) (2026-08-19)
+## [v0.1.3](https://github.com/devlooped/Inbox/tree/v0.1.3) (2026-08-19)
 
-[Full Changelog](https://github.com/devlooped/whatsbox/compare/v0.1.2...v0.1.3)
+[Full Changelog](https://github.com/devlooped/Inbox/compare/v0.1.2...v0.1.3)
 
 :bug: Fixed bugs:
 
-- Stop double-emitting the first pairing QR [\#8](https://github.com/devlooped/whatsbox/pull/8) (@kzu)
+- Stop double-emitting the first pairing QR [\#8](https://github.com/devlooped/Inbox/pull/8) (@kzu)
 
-## [v0.1.2](https://github.com/devlooped/whatsbox/tree/v0.1.2) (2026-08-19)
+## [v0.1.2](https://github.com/devlooped/Inbox/tree/v0.1.2) (2026-08-19)
 
-[Full Changelog](https://github.com/devlooped/whatsbox/compare/v0.1.1...v0.1.2)
+[Full Changelog](https://github.com/devlooped/Inbox/compare/v0.1.1...v0.1.2)
 
 :sparkles: Implemented enhancements:
 
-- Allow setting the WhatsApp linked-device name on initialize [\#5](https://github.com/devlooped/whatsbox/pull/5) (@kzu)
+- Allow setting the WhatsApp linked-device name on initialize [\#5](https://github.com/devlooped/Inbox/pull/5) (@kzu)
 
 :twisted_rightwards_arrows: Merged:
 
-- Expand markdown includes in package readme [\#7](https://github.com/devlooped/whatsbox/pull/7) (@kzu)
+- Expand markdown includes in package readme [\#7](https://github.com/devlooped/Inbox/pull/7) (@kzu)
 
-## [v0.1.1](https://github.com/devlooped/whatsbox/tree/v0.1.1) (2026-08-19)
+## [v0.1.1](https://github.com/devlooped/Inbox/tree/v0.1.1) (2026-08-19)
 
-[Full Changelog](https://github.com/devlooped/whatsbox/compare/7f2763626f62021d3a2070b22dde229fd8522363...v0.1.1)
+[Full Changelog](https://github.com/devlooped/Inbox/compare/7f2763626f62021d3a2070b22dde229fd8522363...v0.1.1)
 
 :sparkles: Implemented enhancements:
 
-- Create C\# client around the native whatsbox CLI [\#4](https://github.com/devlooped/whatsbox/pull/4) (@kzu)
+- Create C\# client around the native whatsbox CLI [\#4](https://github.com/devlooped/Inbox/pull/4) (@kzu)
 
 
 

@@ -1,4 +1,4 @@
-![Icon](docs/logo.png) whatsbox
+![Icon](docs/logo.png) Inbox
 ============
 
 [![Version](https://img.shields.io/nuget/vpre/WhatsBox.svg?color=royalblue)](https://www.nuget.org/packages/WhatsBox)
@@ -19,32 +19,212 @@ OSMF tier. A single fee covers all of [Devlooped packages](https://www.nuget.org
 
 <!-- https://github.com/devlooped/.github/raw/main/osmf.md -->
 ---
-<!-- #content -->
-whatsbox is **an Inbox Protocol implementation for WhatsApp**: one process
-owns a linked-device session and exposes it as a **JSON-RPC 2.0 pub/sub bus
-over stdio**. Clients subscribe to chats (and two system topics), send a
-small set of actions, and receive live events. It is not an archive, a
-search engine, or a WhatsApp CLI.
+# Inbox Client Protocol
+<!-- #inbox -->
+**Inbox Client Protocol (ICP)** is a **JSON-RPC 2.0 pub/sub bus over stdio** for local
+companion processes. One binary owns one messaging-product session. Clients
+subscribe to chats (and two system topics), send a small set of actions, and
+receive live events. It is not an archive, a search engine, or a product CLI.
 
-The WhatsApp connection is powered by [whatsmeow](https://github.com/tulir/whatsmeow).
+The [`Inbox`](https://www.nuget.org/packages/Inbox) package is the managed
+client (`InboxClient`) for **any** implementation of that protocol. Spawn a
+box, exchange newline-delimited JSON, and keep the process alive for the life
+of the session. Product differences are opaque topic strings, `$session` auth
+payloads, and `product` / `identity` / `capabilities` on `initialize`. There
+are no per-product method names.
 
-Use the **managed client** from .NET, or speak the **native protocol** from any
-language that can spawn a process and exchange newline-delimited JSON.
+Wire version `"0.1"`: methods, events (`contents[]` on chat topics), files,
+errors, and capabilities — [`docs/INBOX.md`](docs/INBOX.md).
 
-## Managed Client
+```xml
+<PackageReference Include="Inbox" Version="*" />
+```
 
-The [`WhatsBox`](https://www.nuget.org/packages/WhatsBox) package is a typed
-.NET host for the native `whatsbox` sidecar plus the managed **Inbox Protocol**
-client (`InboxClient`). `PackageReference` it, then publish for your RID —
+Target framework: `net10.0`. The managed surface is AOT-compatible
+(source-generated JSON). Adapters that ship a native sidecar PackageReference
+`Inbox` so pointer +
+`dotnet pack -r` packaging is shared.
+
+## InboxClient
+
+`InboxClient` turns unary JSON-RPC methods into `Task<T>` and exposes a
+single-consumer pull stream of typed `InboxEvent`s. Construct it over an
+already-started NDJSON `TextReader`+`TextWriter` pair (the box’s stdout and
+stdin). Disposing the client completes `Events`.
+
+Start consuming `Events` **before** (or concurrently with) a connecting
+`InitializeAsync`. Auth events (QR, OAuth, device-code, …) arrive on
+`$session` while that call is still waiting.
+
+WhatsBox-shaped illustration — the same types work for any box:
+
+```csharp
+using Inbox;
+
+await using var box = new InboxClient(stdout, stdin);
+
+var pump = Task.Run(async () =>
+{
+    await foreach (var ev in box.Events)
+    {
+        switch (ev)
+        {
+            case SessionQr qr:
+                // Product auth: WhatsBox emits qr; other boxes may emit oauth, …
+                Console.WriteLine(qr.Code);
+                break;
+            case SessionOnline online:
+                Console.WriteLine($"online as {online.Me}");
+                break;
+            case SessionPairError err:
+                Console.Error.WriteLine(err.Message);
+                break;
+            case DirectoryReady:
+                var page = await box.ListDirectoryAsync(new DirectoryListOptions { Kind = "user" });
+                foreach (var row in page.Items)
+                    Console.WriteLine($"{row.Name ?? row.Topic}");
+                break;
+            case DirectoryUpsert upsert:
+                Console.WriteLine($"directory: {upsert.Name ?? upsert.Jid}");
+                break;
+            case ChatMessage msg:
+                Console.WriteLine($"{msg.ByName ?? msg.By}: {msg.Text}");
+                if (msg.Id is not null)
+                    await box.ReadAsync(msg);
+                break;
+        }
+    }
+});
+
+var session = await box.InitializeAsync(new InitializeOptions
+{
+    Store = store,
+    Files = files,
+    Subscribe = ["$directory"],
+    Connect = true,
+});
+
+if (session.Status == "online")
+{
+    var listed = await box.ListDirectoryAsync(new DirectoryListOptions { Query = "alice" });
+    var chat = listed.Items[0].Topic;
+    await box.SubscribeAsync([chat]);
+    await box.SendAsync(chat, text: "hello from Inbox");
+}
+
+await pump;
+```
+
+`InitializeAsync(store)` is the short form: no files, no extra subscriptions,
+no connect. Pass `InitializeOptions` for blobs, initial topics, or
+`Connect = true` (implicit `session.connect`).
+
+| Method | RPC | Result |
+|---|---|---|
+| `InitializeAsync` | `initialize` | `SessionSnapshot` |
+| `ConnectAsync` | `session.connect` | `SessionSnapshot` |
+| `PairAsync` | `session.pair` | `SessionSnapshot` |
+| `DisconnectAsync` | `session.disconnect` | `SessionSnapshot` |
+| `LogoutAsync` | `session.logout` | `SessionSnapshot` (`new`) |
+| `StatusAsync` | `session.status` | `SessionSnapshot` |
+| `SubscribeAsync` / `UnsubscribeAsync` | `subscribe` / `unsubscribe` | `TopicsResult` (canonical topics) |
+| `ListDirectoryAsync` | `directory.list` | `DirectoryListResult` |
+| `GetDirectoryAsync` | `directory.get` | `DirectoryRow` |
+| `SendAsync` / `ReactAsync` | `messages.send` | `SendResult` (`Id`, canonical `Topic`) |
+| `ReadAsync` | `messages.read` | `ReadResult` |
+
+`SessionSnapshot.Status` is `new` (never authenticated), `offline` (keys on
+disk, socket down), or `online`. `Me` is the authenticated identity and is
+omitted when `new`.
+
+`SubscribeAsync` / `UnsubscribeAsync` take **canonical topics** only. Resolve
+names with `ListDirectoryAsync` first. Results and event topics are always
+canonical once the box knows them.
+
+Send text (sugar), a file under `files`, a reply, and/or a reaction:
+
+```csharp
+await box.SendAsync(chat, text: "hello");
+
+await box.SendAsync(chat, [new ImagePart { Path = "out/photo.jpg" }]);
+
+await box.SendAsync(chat, text: "agreed",
+    reply: new MessageReply(id, by));
+
+await box.ReactAsync(chat, target: id, by, "👍");
+```
+
+`by` is required on reply, react, and `ReadAsync` — copy it from the inbound
+event. Use `"me"` when targeting your own message. Mark-read is never
+automatic.
+
+RPC failures throw `InboxRpcException` with the JSON-RPC `Code` and a stable
+`Token` (`not_initialized`, `files_required`, `not_found`, …).
+
+stderr is logs only. It is never protocol.
+
+## Events and contents
+
+`Events` is a single-consumer `IAsyncEnumerable<InboxEvent>`. Enumerate it
+once. It completes when the child stdout ends or the client is disposed.
+
+| Type | Topic | Kind |
+|---|---|---|
+| `SessionQr` | `$session` | `qr` — string to render (WhatsBox illustration) |
+| `SessionPaired` | `$session` | `paired` |
+| `SessionPairError` | `$session` | `pair_error` |
+| `SessionOnline` / `SessionOffline` | `$session` | `online` / `offline` |
+| `SessionLoggedOut` | `$session` | `logged_out` |
+| `SessionRemap` | `$session` | `remap` — subscription moved to a new canonical topic |
+| `SessionOverflow` | `$session` | `overflow` — per-topic queue dropped oldest |
+| `DirectoryUpsert` / `DirectoryRemove` / `DirectoryReady` | `$directory` | catalog changes |
+| `ChatMessage` | chat topic | `message` — `Contents` (text, media, location, unknown); `Text` concatenates text parts |
+| `ChatReaction` | chat topic | `reaction` — one reaction part |
+| `ChatAck` | chat topic | `ack` — `delivered` / `read` / `played` |
+| `ChatMeta` | chat topic | `meta` — join/leave/rename/… |
+
+Chat events share `Id`, `By` (`"me"` or an opaque user id), `Handle`
+(`@username` when known), `TopicName`, `ByName`, and `Contents`. Look up `By`
+(or a 1:1 `Topic`) with `GetDirectoryAsync` for extra directory fields.
+
+Content parts: `text`, `image`, `video`, `audio`, `document`, `sticker`,
+`location`, `unknown`, plus `reaction` / `ack` / `meta` on those kinds.
+Blob parts carry a relative `Path` under `initialize.files`.
+
+## Implementing a box
+
+An implementation speaks this envelope on stdio (JSON-RPC 2.0, one object per
+line, no batch arrays). Advertise `product`, `identity`, and `capabilities` on
+`initialize` / `session.status`. Consumers construct `InboxClient` over that
+process — they never type-parse topic / `by` strings.
+
+Suggested binaries (not normative): `whatsbox`, `discordbox`, `slackbox`,
+`teamsbox`, `telegrambox`, `matrixbox`. Full method table, event shapes, and
+error tokens: [`docs/INBOX.md`](docs/INBOX.md).
+<!-- #inbox -->
+# WhatsBox
+<!-- #whatsbox -->
+The native **`whatsbox` adapter** implements Inbox Client Protocol (ICP) for WhatsApp —
+one process owns a linked-device session and exposes it on the bus. The
+[`WhatsBox`](https://www.nuget.org/packages/WhatsBox) NuGet is the managed
+host on top of that native adapter (it is not the protocol itself). Protocol,
+events, and `InboxClient`: the [`Inbox`](https://www.nuget.org/packages/Inbox)
+package.
+
+The WhatsApp connection is powered by [whatsmeow](https://github.com/tulir/whatsmeow);
+clients never talk to whatsmeow directly. WhatsApp-specific mapping (LID
+topics, QR pairing, ContextInfo quotes, HistorySync headers,
+`attachments: "single"`) is [`docs/WHATSBOX.md`](docs/WHATSBOX.md).
+
+## Managed host
+
+`WhatsBoxClient` is an `InboxClient` that starts the native `whatsbox` /
+`whatsbox.exe` sidecar. `PackageReference` it, then publish for your RID —
 the matching native binary is restored and copied next to the app.
 
 ```xml
 <PackageReference Include="WhatsBox" Version="*" />
 ```
-
-Target framework: `net10.0`. The managed surface is AOT-compatible (source-generated JSON).
-
-### Packaging and publish
 
 `WhatsBox` is a **pointer package**: it ships `WhatsBox.dll` plus a
 `runtime.json` that maps each runtime identifier to a RID-only package.
@@ -57,11 +237,8 @@ Target framework: `net10.0`. The managed surface is AOT-compatible (source-gener
 You only reference `WhatsBox`. Restore and `dotnet publish -r <rid>` pull the
 matching `WhatsBox.{rid}` package automatically. The sidecar lands next to the
 app (`AppContext.BaseDirectory`); `WhatsBoxClient` starts it from there — never
-from the current working directory. The pointer package depends on [`Inbox`](https://www.nuget.org/packages/Inbox)
-(`InboxClient`); Inbox's RID packing targets are **not** transitive.
-
-Adapters for other products PackageReference `Inbox` directly (or ProjectReference
-it and import `Inbox.targets`) so pointer + `dotnet pack -r` packaging is shared.
+from the current working directory. Inbox's RID packing targets are **not**
+transitive.
 
 ```bash
 dotnet add package WhatsBox
@@ -72,26 +249,30 @@ Do not add `WhatsBox.win-x64` (or any other RID package) by hand. Do not treat
 this as a .NET tool (`PackAsTool`); it is a `PackageReference` library plus a
 native asset.
 
-The companion REPL is a separate tool package (`wd`) with the
+The companion sample REPL is a separate tool package (`wd`, for WhatsBox Demo) with the
 same pointer + RID split:
 
 ```bash
-dotnet tool install -g wd
-wd
+ndnx wd
 ```
+
+> We recommend using [`ndnx`](https://github.com/devlooped/ndnx) 
+> for fastest native-only execution. It's like dnx but native, with
+> no .NET runtime/SDK dependency.
 
 Supported RIDs: `win-x64`, `win-arm64`, `linux-x64`, `linux-arm64`, `osx-x64`,
 `osx-arm64`.
 
-### API
+## QR pairing and store
 
-`WhatsBoxClient` owns the child process, turns unary JSON-RPC methods into
-`Task<T>`, and exposes a single-consumer pull stream of typed events.
-Disposing the client stops the sidecar.
+`new WhatsBoxClient()` starts the sidecar from `AppContext.BaseDirectory`.
+Use `WhatsBoxClient.Start(baseDirectory)` to point at another folder, or
+construct from an already-started `WhatsBoxHost` if you spawn the process
+yourself.
 
 Start consuming `Events` **before** (or concurrently with) a connecting
-`InitializeAsync`. Pairing QR codes arrive as events while that call is still
-waiting for a scan.
+`InitializeAsync`. Pairing QR codes arrive as `SessionQr` while that call is
+still waiting for a scan.
 
 ```csharp
 using WhatsBox;
@@ -115,17 +296,6 @@ var pump = Task.Run(async () =>
                 break;
             case SessionOnline online:
                 Console.WriteLine($"online as {online.Me}");
-                break;
-            case SessionPairError err:
-                Console.Error.WriteLine(err.Message);
-                break;
-            case DirectoryReady:
-                var page = await box.ListDirectoryAsync(new DirectoryListOptions { Kind = "user" });
-                foreach (var row in page.Items)
-                    Console.WriteLine($"{row.Name ?? row.Topic}  {row.Pn}");
-                break;
-            case DirectoryUpsert upsert:
-                Console.WriteLine($"directory: {upsert.Name ?? upsert.Jid}");
                 break;
             case ChatMessage msg:
                 Console.WriteLine($"{msg.ByName ?? msg.By}: {msg.Text}");
@@ -155,118 +325,48 @@ if (session.Status == "online")
 await pump;
 ```
 
-`InitializeAsync(store)` is the short form: no files, no extra subscriptions,
-no connect. The linked-device name defaults to `whatsbox on {machine}`. Pass
-`InitializeOptions` when you want blobs, initial topics, a custom
-`DeviceName`, or `Connect = true` (implicit `session.connect`, and implicit
-QR pairing when the store is new).
+`InitializeAsync(store)` is the short form. The linked-device name defaults to
+`whatsbox on {machine}`. Pass `InitializeOptions` when you want blobs, initial
+topics, a custom `DeviceName`, or `Connect = true` (implicit `session.connect`,
+and implicit QR pairing when the store is new).
 
-| Method | RPC | Result |
-|---|---|---|
-| `InitializeAsync` | `initialize` | `SessionSnapshot` |
-| `ConnectAsync` | `session.connect` | `SessionSnapshot` |
-| `PairAsync` | `session.pair` | `SessionSnapshot` |
-| `DisconnectAsync` | `session.disconnect` | `SessionSnapshot` |
-| `LogoutAsync` | `session.logout` | `SessionSnapshot` (`new`) |
-| `StatusAsync` | `session.status` | `SessionSnapshot` |
-| `SubscribeAsync` / `UnsubscribeAsync` | `subscribe` / `unsubscribe` | `TopicsResult` (canonical JIDs) |
-| `ListDirectoryAsync` | `directory.list` | `DirectoryListResult` |
-| `GetDirectoryAsync` | `directory.get` | `DirectoryRow` |
-| `SendAsync` / `ReactAsync` | `messages.send` | `SendResult` (`Id`, canonical `Topic`) |
-| `ReadAsync` | `messages.read` | `ReadResult` |
-
-`SessionSnapshot.Status` is `new` (never paired), `offline` (keys on disk,
-socket down), or `online`. `Me` is the paired LID and is omitted when `new`.
-
-`SubscribeAsync` / `UnsubscribeAsync` take canonical JIDs (LID, group, or
-PN JID). Resolve names and phone numbers with `ListDirectoryAsync` first.
+There is **no default store**. One process, one store, one WhatsApp session.
+`SubscribeAsync` / `UnsubscribeAsync` take canonical JIDs (LID, group, or PN
+JID). Resolve names and phone numbers with `ListDirectoryAsync` first.
 `SendAsync`, `ReadAsync`, and `GetDirectoryAsync` still accept a LID, a
 phone-number JID, or a phone number (`+15551234567` or digits). Results and
 event topics are always **canonical** (LID or group JID) once a LID is known.
 
-Send text (sugar), a file under `files`, a reply, and/or a reaction:
+> [JID](https://wiki.xmpp.org/web/JID_and_Contacts) or Jabber ID 
+> is the canonical identifier for a WhatsApp chat. LID is a
+> logical identifier (like a username) that is stable across devices.
 
-```csharp
-await box.SendAsync(chat, text: "hello");
+Chat events have no phone number — look up `By` (or a 1:1 `Topic`) with
+`GetDirectoryAsync` when you need `Pn`. In 1:1 the sidecar ignores `by` on
+reply / react / read; in groups every id in that call must share that author.
 
-await box.SendAsync(chat, [new ImagePart { Path = "out/photo.jpg" }]);
-
-await box.SendAsync(chat, text: "agreed",
-    reply: new MessageReply(id, by));
-
-await box.ReactAsync(chat, target: id, by, "👍");
-```
-
-`by` is required on reply, react, and `ReadAsync` — copy it from the inbound
-event. Use `"me"` when targeting your own message. In 1:1 the sidecar ignores
-`by`; in groups every id in that call must share that author. Mark-read is
-never automatic.
-
-RPC failures throw `WhatsRpcException` with the JSON-RPC `Code` and a stable
-`Token` (`not_initialized`, `files_required`, `not_found`, …).
-
-### Events
-
-`Events` is a single-consumer `IAsyncEnumerable<WhatsEvent>`. Enumerate it
-once. It completes when the child stdout ends or the client is disposed.
-
-| Type | Topic | Kind |
-|---|---|---|
-| `SessionQr` | `$session` | `qr` — string to render as QR |
-| `SessionPaired` | `$session` | `paired` |
-| `SessionPairError` | `$session` | `pair_error` |
-| `SessionOnline` / `SessionOffline` | `$session` | `online` / `offline` |
-| `SessionLoggedOut` | `$session` | `logged_out` |
-| `SessionRemap` | `$session` | `remap` — subscription moved PN → LID |
-| `SessionOverflow` | `$session` | `overflow` — per-topic queue dropped oldest |
-| `DirectoryUpsert` / `DirectoryRemove` / `DirectoryReady` | `$directory` | catalog changes |
-| `ChatMessage` | chat JID | `message` — `Contents` (text, media, location, unknown); `Text` concatenates text parts |
-| `ChatReaction` | chat JID | `reaction` — one reaction part |
-| `ChatAck` | chat JID | `ack` — `delivered` / `read` / `played` |
-| `ChatMeta` | chat JID | `meta` — join/leave/rename/… |
-
-Chat events share `Id`, `By` (`"me"` or a LID), `Handle` (`@username` when
-known), `TopicName`, `ByName`, and `Contents`. There is no phone number on
-chat events — look up `By` (or a 1:1 `Topic`) with `GetDirectoryAsync` when
-you need `Pn`.
-
-### Host
-
-`new WhatsBoxClient()` starts `whatsbox` / `whatsbox.exe` from
-`AppContext.BaseDirectory`. Use `WhatsBoxClient.Start(baseDirectory)` to
-point at another folder, or construct from an already-started `WhatsBoxHost`
-/ a raw NDJSON `TextReader`+`TextWriter` pair if you spawn the process
-yourself.
-
-stderr is logs only (`Debug.WriteLine` when the client owns the host). It is
-never protocol.
-
-## Native Protocol
-
-The `whatsbox` binary is a local companion process. Spawn it, speak
-**JSON-RPC 2.0** (NDJSON) on stdio, and keep the process alive for the life
-of the session. The wire is **Inbox Protocol** [`docs/INBOX.md`](docs/INBOX.md)
-version `"0.1"`: methods, events (`contents[]` on chat topics), files,
-errors, and capabilities. WhatsApp-specific mapping (LID topics, QR pairing,
-ContextInfo quotes, HistorySync headers, `attachments: "single"`) is
-[`docs/WHATSBOX.md`](docs/WHATSBOX.md).
-
-The WhatsApp Web socket behind it is
-[whatsmeow](https://github.com/tulir/whatsmeow); clients never talk to
-whatsmeow directly.
-
-### Invocation
+## Native sidecar
 
 ```text
 whatsbox [--store ABSOLUTE_PATH] [--version] [--help]
 ```
 
-stdin / stdout is NDJSON JSON-RPC; stderr is logs. No default store. One
-process, one store, one WhatsApp session. Full method table, event shapes,
-and error tokens: [`docs/INBOX.md`](docs/INBOX.md). LID / QR / store layout:
+stdin / stdout is NDJSON JSON-RPC; stderr is logs. LID / QR / store layout:
 [`docs/WHATSBOX.md`](docs/WHATSBOX.md).
 
-<!-- #content -->
+### v1 scope
+
+**Does:** pair via QR, connect / auto-reconnect / disconnect / logout,
+directory populate + list/get + live `$directory`, subscribe by JID
+(LID-first), live messages / receipts / in-chat `meta`, send `contents[]`,
+reply, react, explicit mark-read.
+
+**Does not:** message history, search, backfill, export; stored bodies or
+last-message previews; typing or “available” presence; edit or revoke;
+pair-code or passkey pairing; channels, status, calls, blocklist or group
+admin RPCs; MCP / sockets; multi-account in one process; topic wildcards; a
+default store path.
+<!-- #whatsbox -->
 
 ## Demo
 
@@ -285,7 +385,7 @@ ndnx wd
 ```
 
 `dnx` always goes through the SDK. `ndnx` starts the cached AOT binary
-directly — no SDK after the first download. Pin a version (`wd@1.0.0`)
+directly — no SDK needed at all. Pin a version (`wd@1.0.0`)
 to skip latest-version lookup.
 
 To install a `wd` command on PATH instead:
@@ -303,19 +403,6 @@ prints a pairing QR, and waits for WhatsApp → Linked devices. Later runs
 reuse that store.
 <!-- #content -->
 <!-- src/WhatsDemo/readme.md#content -->
-
-### v1 scope
-
-**Does:** pair via QR, connect / auto-reconnect / disconnect / logout,
-directory populate + list/get + live `$directory`, subscribe by JID
-(LID-first), live messages / receipts / in-chat `meta`, send `contents[]`,
-reply, react, explicit mark-read.
-
-**Does not:** message history, search, backfill, export; stored bodies or
-last-message previews; typing or “available” presence; edit or revoke;
-pair-code or passkey pairing; channels, status, calls, blocklist or group
-admin RPCs; MCP / sockets; multi-account in one process; topic wildcards; a
-default store path.
 
 ---
 <!-- include https://github.com/devlooped/sponsors/raw/main/footer.md -->

@@ -4,7 +4,7 @@
     <PackageId>Inbox</PackageId>
     <RootNamespace>Inbox</RootNamespace>
     <AssemblyName>Inbox</AssemblyName>
-    <Description>Managed reference client for an Inbox Protocol-implementation CLI (JSON-RPC 2.0, NDJSON over stdio), plus RID packing targets for native adapters.</Description>
+    <Description>Managed reference client for an Inbox Client Protocol (ICP) implementation CLI (JSON-RPC 2.0, NDJSON over stdio), plus RID packing targets for native adapters.</Description>
     <IsAotCompatible>true</IsAotCompatible>
   </PropertyGroup>
   <ItemGroup>
@@ -13,6 +13,7 @@
   <ItemGroup>
     <PackageReference Include="JsonPeek" Version="1.3.0" PrivateAssets="all" GeneratePathProperty="true" />
     <PackageReference Include="JsonPoke" Version="1.3.0" PrivateAssets="all" GeneratePathProperty="true" />
+    <PackageReference Include="Readme" Version="1.2.1" PrivateAssets="all" />
   </ItemGroup>
   <ItemGroup>
     <None Update="build\Inbox.targets" Pack="true" PackagePath="build\Inbox.targets" />
