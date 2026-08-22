@@ -57,7 +57,11 @@ Target framework: `net10.0`. The managed surface is AOT-compatible (source-gener
 You only reference `WhatsBox`. Restore and `dotnet publish -r <rid>` pull the
 matching `WhatsBox.{rid}` package automatically. The sidecar lands next to the
 app (`AppContext.BaseDirectory`); `WhatsBoxClient` starts it from there — never
-from the current working directory.
+from the current working directory. The pointer package depends on [`Inbox`](https://www.nuget.org/packages/Inbox)
+(`InboxClient`); Inbox's RID packing targets are **not** transitive.
+
+Adapters for other products PackageReference `Inbox` directly (or ProjectReference
+it and import `Inbox.targets`) so pointer + `dotnet pack -r` packaging is shared.
 
 ```bash
 dotnet add package WhatsBox

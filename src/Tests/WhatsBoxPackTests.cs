@@ -39,7 +39,7 @@ public class WhatsBoxPackTests
     }
 
     [Fact]
-    public void WriteWhatsBoxRuntimeJson_maps_six_rids_to_rid_packages()
+    public void WriteInboxRuntimeJson_maps_six_rids_to_rid_packages()
     {
         var repo = FindRepoRoot();
         var project = Path.Combine(repo, "src", "WhatsBox", "WhatsBox.csproj");
@@ -61,7 +61,7 @@ public class WhatsBoxPackTests
         start.ArgumentList.Add("msbuild");
         start.ArgumentList.Add(project);
         start.ArgumentList.Add("-restore");
-        start.ArgumentList.Add("-t:WriteWhatsBoxRuntimeJson");
+        start.ArgumentList.Add("-t:WriteInboxRuntimeJson");
         start.ArgumentList.Add("-p:Configuration=" + configuration);
         start.ArgumentList.Add("-p:DesignTimeBuild=true");
         start.ArgumentList.Add("-p:GeneratePackageOnBuild=false");
@@ -98,22 +98,46 @@ public class WhatsBoxPackTests
         var slnx = File.ReadAllText(Path.Combine(repo, "WhatsBox.slnx"));
         Assert.Contains("src/Inbox/Inbox.csproj", slnx);
         var inbox = File.ReadAllText(Path.Combine(repo, "src", "Inbox", "Inbox.csproj"));
+        Assert.Contains("<PackageId>Inbox</PackageId>", inbox);
         Assert.Contains("<AssemblyName>Inbox</AssemblyName>", inbox);
         Assert.Contains("<RootNamespace>Inbox</RootNamespace>", inbox);
+        Assert.Contains(@"PackagePath=""build\Inbox.targets""", inbox);
+        Assert.Contains(@"<None Update=""build\Inbox.targets""", inbox);
+        Assert.DoesNotContain("<Import ", inbox);
+        Assert.DoesNotContain("buildTransitive", inbox, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("<IsPackable>false</IsPackable>", inbox);
         Assert.DoesNotContain("whatsbox.exe", inbox, StringComparison.OrdinalIgnoreCase);
+
+        var targets = File.ReadAllText(Path.Combine(repo, "src", "Inbox", "build", "Inbox.targets"));
+        Assert.Contains("<InboxTargetsImported>true</InboxTargetsImported>", targets);
+        Assert.Contains("buildTransitive", targets);
+        Assert.Contains("Condition=\"'$(RuntimeIdentifiers)' != ''\"", targets);
+        Assert.Contains("$(InboxPackageId).$(RuntimeIdentifier)", targets);
+        Assert.Contains("WriteInboxRuntimeJson", targets);
+        Assert.Contains("PackInboxNativeBinary", targets);
+        Assert.DoesNotContain("go build", targets, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("whatsbox.exe", targets, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("<RuntimeIdentifiers Condition=", targets);
+        Assert.DoesNotContain("win-x64;win-arm64;linux-x64;linux-arm64;osx-x64;osx-arm64", targets);
+
         var csproj = File.ReadAllText(Path.Combine(repo, "src", "WhatsBox", "WhatsBox.csproj"));
         Assert.Contains("<PackageId>WhatsBox</PackageId>", csproj);
         Assert.Contains(@"..\Inbox\Inbox.csproj", csproj);
-        Assert.Contains("WhatsBox.$(RuntimeIdentifier)", csproj);
-        Assert.Contains("<IncludeBuildOutput Condition=\"'$(RuntimeIdentifier)' == ''\">true</IncludeBuildOutput>", csproj);
-        Assert.Contains("<IncludeBuildOutput Condition=\"'$(RuntimeIdentifier)' != ''\">false</IncludeBuildOutput>", csproj);
+        Assert.Contains(@"..\Inbox\build\Inbox.targets", csproj);
+        Assert.Contains("<RuntimeIdentifiers>win-x64;win-arm64;linux-x64;linux-arm64;osx-x64;osx-arm64</RuntimeIdentifiers>", csproj);
+        Assert.DoesNotContain("PrivateAssets=\"all\"", csproj.Substring(csproj.IndexOf(@"..\Inbox\Inbox.csproj", StringComparison.Ordinal)));
+        Assert.DoesNotContain("WhatsBox.$(RuntimeIdentifier)", csproj);
+        Assert.DoesNotContain("IncludeBuildOutput", csproj);
+        Assert.DoesNotContain("WriteWhatsBoxRuntimeJson", csproj);
+        Assert.DoesNotContain("PackWhatsBoxNativeBinary", csproj);
+        Assert.DoesNotContain("PackInboxReferenceOutput", csproj);
         Assert.DoesNotContain("<PackAsTool", csproj);
+        Assert.Contains("InboxNativeBinary", csproj);
+        Assert.Contains("BuildWhatsBoxRidNative", csproj);
         foreach (var rid in SupportedRids)
             Assert.Contains(rid, csproj);
 
-        var template = File.ReadAllText(Path.Combine(repo, "src", "WhatsBox", "runtime.json"));
-        using var doc = JsonDocument.Parse(template);
-        Assert.True(doc.RootElement.TryGetProperty("runtimes", out _));
+        Assert.False(File.Exists(Path.Combine(repo, "src", "WhatsBox", "runtime.json")));
     }
 
     [Fact]
@@ -150,7 +174,10 @@ public class WhatsBoxPackTests
 
         var build = File.ReadAllText(Path.Combine(repo, ".github", "workflows", "build.yml"));
         Assert.Contains("os-matrix.json", build);
+        Assert.Contains("dotnet pack src/Inbox/Inbox.csproj", build);
         Assert.Contains("dotnet pack src/WhatsBox/WhatsBox.csproj", build);
+        Assert.True(build.IndexOf("dotnet pack src/Inbox/Inbox.csproj", StringComparison.Ordinal) <
+            build.IndexOf("dotnet pack src/WhatsBox/WhatsBox.csproj", StringComparison.Ordinal));
         Assert.Contains("dotnet pack src/WhatsDemo/WhatsDemo.csproj", build);
         Assert.Contains("name: package-${{ steps.rid.outputs.rid }}", build);
 
@@ -166,7 +193,10 @@ public class WhatsBoxPackTests
         Assert.Contains("macos-15-intel", publish);
         Assert.Contains("name: package-${{ matrix.rid }}", publish);
         Assert.Contains("pattern: package-*", publish);
+        Assert.Contains("dotnet pack src/Inbox/Inbox.csproj", publish);
         Assert.Contains("dotnet pack src/WhatsBox/WhatsBox.csproj", publish);
+        Assert.True(publish.IndexOf("dotnet pack src/Inbox/Inbox.csproj", StringComparison.Ordinal) <
+            publish.IndexOf("dotnet pack src/WhatsBox/WhatsBox.csproj", StringComparison.Ordinal));
         Assert.Contains("dotnet pack src/WhatsDemo/WhatsDemo.csproj", publish);
         Assert.DoesNotContain("<PackAsTool", File.ReadAllText(Path.Combine(repo, "src", "WhatsBox", "WhatsBox.csproj")));
         Assert.Matches(new Regex(@"pointerPackages"), publish);

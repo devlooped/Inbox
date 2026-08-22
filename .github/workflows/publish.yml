@@ -55,6 +55,8 @@ jobs:
       - name: 📦 pack
         run: |
           $ErrorActionPreference = 'Stop'
+          dotnet pack src/Inbox/Inbox.csproj -c $env:Configuration -p:GeneratePackageOnBuild=false -bl:"inbox-pack.binlog"
+          if ($LASTEXITCODE -ne 0) { throw "Inbox pack failed with exit code $LASTEXITCODE." }
           dotnet pack src/WhatsBox/WhatsBox.csproj -c $env:Configuration -p:GeneratePackageOnBuild=false -bl:"pointer-pack.binlog"
           if ($LASTEXITCODE -ne 0) { throw "WhatsBox pointer pack failed with exit code $LASTEXITCODE." }
           dotnet pack src/WhatsBox/WhatsBox.csproj -c $env:Configuration -r ${{ matrix.rid }} -p:GeneratePackageOnBuild=false -bl:"pack-${{ matrix.rid }}.binlog"
@@ -115,7 +117,9 @@ jobs:
           }
           $rid = "$os-$cpu"
           $ErrorActionPreference = 'Stop'
-          Write-Host "Packing WhatsBox pointer + WhatsBox.$rid into bin/ before WhatsDemo restore"
+          Write-Host "Packing Inbox + WhatsBox pointer + WhatsBox.$rid into bin/ before WhatsDemo restore"
+          dotnet pack src/Inbox/Inbox.csproj -c $env:Configuration -p:GeneratePackageOnBuild=false -bl:inbox-pack.binlog
+          if ($LASTEXITCODE -ne 0) { throw "Inbox pack failed with exit code $LASTEXITCODE." }
           dotnet pack src/WhatsBox/WhatsBox.csproj -c $env:Configuration -p:GeneratePackageOnBuild=false -bl:pointer-pack.binlog
           if ($LASTEXITCODE -ne 0) { throw "WhatsBox pointer pack failed with exit code $LASTEXITCODE." }
           dotnet pack src/WhatsBox/WhatsBox.csproj -c $env:Configuration -r $rid -p:GeneratePackageOnBuild=false -bl:"pack-$rid.binlog"
@@ -130,6 +134,8 @@ jobs:
       - name: 📦 pointer
         run: |
           $ErrorActionPreference = 'Stop'
+          dotnet pack src/Inbox/Inbox.csproj -c $env:Configuration -p:GeneratePackageOnBuild=false -bl:inbox-pack.binlog
+          if ($LASTEXITCODE -ne 0) { throw "Inbox pack failed with exit code $LASTEXITCODE." }
           dotnet pack src/WhatsBox/WhatsBox.csproj -c $env:Configuration -p:GeneratePackageOnBuild=false -bl:pointer-pack.binlog
           if ($LASTEXITCODE -ne 0) { throw "WhatsBox pointer pack failed with exit code $LASTEXITCODE." }
           dotnet pack src/WhatsDemo/WhatsDemo.csproj -c $env:Configuration -p:GeneratePackageOnBuild=false -bl:pointer-pack-wd.binlog
@@ -140,6 +146,7 @@ jobs:
         with:
           name: package-pointer
           path: |
+            bin/Inbox.*.nupkg
             bin/WhatsBox.*.nupkg
             bin/wd.*.nupkg
           retention-days: 30

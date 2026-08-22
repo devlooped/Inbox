@@ -89,8 +89,10 @@ jobs:
           }
           "rid=$rid" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           $ErrorActionPreference = 'Stop'
-          Write-Host "Packing WhatsBox pointer + WhatsBox.$rid into bin/ before WhatsDemo restore"
+          Write-Host "Packing Inbox + WhatsBox pointer + WhatsBox.$rid into bin/ before WhatsDemo restore"
           # GeneratePackageOnBuild=true makes `dotnet pack` skip Build (NU5026: WhatsBox.dll missing).
+          dotnet pack src/Inbox/Inbox.csproj -c $env:Configuration -p:GeneratePackageOnBuild=false -bl:inbox-pack.binlog
+          if ($LASTEXITCODE -ne 0) { throw "Inbox pack failed with exit code $LASTEXITCODE." }
           dotnet pack src/WhatsBox/WhatsBox.csproj -c $env:Configuration -p:GeneratePackageOnBuild=false -bl:pointer-pack.binlog
           if ($LASTEXITCODE -ne 0) { throw "WhatsBox pointer pack failed with exit code $LASTEXITCODE." }
           dotnet pack src/WhatsBox/WhatsBox.csproj -c $env:Configuration -r $rid -p:GeneratePackageOnBuild=false -bl:"pack-$rid.binlog"
