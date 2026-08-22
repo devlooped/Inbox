@@ -19,7 +19,7 @@ import (
 	waLog "go.mau.fi/whatsmeow/util/log"
 	"google.golang.org/protobuf/proto"
 
-	"github.com/devlooped/whatsbox/internal/sqliteutil"
+	"github.com/devlooped/whatsbox/sqliteutil"
 
 	_ "modernc.org/sqlite"
 )

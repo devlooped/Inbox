@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/devlooped/whatsbox/internal/rpc"
-	"github.com/devlooped/whatsbox/internal/topic"
+	"github.com/devlooped/whatsbox/rpc"
+	"github.com/devlooped/whatsbox/topic"
 )
 
 type Dir struct {

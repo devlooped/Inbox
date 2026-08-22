@@ -49,8 +49,8 @@ jobs:
       - name: ⚙ go
         uses: actions/setup-go@v5
         with:
-          go-version-file: native/go.mod
-          cache-dependency-path: native/go.sum
+          go-version-file: src/WhatsBox.Native/go.mod
+          cache-dependency-path: src/WhatsBox.Native/go.sum
 
       - name: 📦 pack
         run: |
@@ -96,8 +96,8 @@ jobs:
       - name: ⚙ go
         uses: actions/setup-go@v5
         with:
-          go-version-file: native/go.mod
-          cache-dependency-path: native/go.sum
+          go-version-file: src/WhatsBox.Native/go.mod
+          cache-dependency-path: src/WhatsBox.Native/go.sum
 
       - name: 📦 whatsbox
         run: |

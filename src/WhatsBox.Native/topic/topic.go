@@ -61,10 +61,10 @@ const (
 )
 
 type Parsed struct {
-	Raw    string
-	Kind   Kind
-	JID    types.JID
-	Phone  string
+	Raw       string
+	Kind      Kind
+	JID       types.JID
+	Phone     string
 	Canonical string
 }
 

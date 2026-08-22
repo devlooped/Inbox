@@ -15,7 +15,7 @@
     <NoWarn>$(NoWarn);NU5128</NoWarn>
     <NativeWhatsBoxName Condition="$([MSBuild]::IsOSPlatform('Windows'))">whatsbox.exe</NativeWhatsBoxName>
     <NativeWhatsBoxName Condition="'$(NativeWhatsBoxName)' == ''">whatsbox</NativeWhatsBoxName>
-    <NativeWhatsBoxSourceRoot>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\..\native'))</NativeWhatsBoxSourceRoot>
+    <NativeWhatsBoxSourceRoot>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\WhatsBox.Native'))</NativeWhatsBoxSourceRoot>
     <NativeWhatsBoxOutput>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)$(BaseIntermediateOutputPath)native\$(NativeWhatsBoxName)'))</NativeWhatsBoxOutput>
   </PropertyGroup>
 
@@ -62,9 +62,9 @@
   </Target>
 
   <!-- Build the current-OS whatsbox next to this project so project-reference copy lands it in the consumer outdir. -->
-  <Target Name="BuildNativeWhatsBox" BeforeTargets="BeforeCompile;GetCopyToOutputDirectoryItems;AssignTargetPaths" Inputs="$(NativeWhatsBoxSourceRoot)\cmd\**\*.go;$(NativeWhatsBoxSourceRoot)\internal\**\*.go;$(NativeWhatsBoxSourceRoot)\go.mod;$(NativeWhatsBoxSourceRoot)\go.sum" Outputs="$(NativeWhatsBoxOutput)">
+  <Target Name="BuildNativeWhatsBox" BeforeTargets="BeforeCompile;GetCopyToOutputDirectoryItems;AssignTargetPaths" Inputs="$(NativeWhatsBoxSourceRoot)\**\*.go;$(NativeWhatsBoxSourceRoot)\go.mod;$(NativeWhatsBoxSourceRoot)\go.sum" Outputs="$(NativeWhatsBoxOutput)">
     <MakeDir Directories="$([System.IO.Path]::GetDirectoryName($(NativeWhatsBoxOutput)))" />
-    <Exec Command="go build -o &quot;$(NativeWhatsBoxOutput)&quot; ./cmd/whatsbox" WorkingDirectory="$(NativeWhatsBoxSourceRoot)" EnvironmentVariables="CGO_ENABLED=0" />
+    <Exec Command="go build -o &quot;$(NativeWhatsBoxOutput)&quot; ." WorkingDirectory="$(NativeWhatsBoxSourceRoot)" EnvironmentVariables="CGO_ENABLED=0" />
   </Target>
 
   <Target Name="IncludeNativeWhatsBox" AfterTargets="BuildNativeWhatsBox" BeforeTargets="GetCopyToOutputDirectoryItems;AssignTargetPaths">
@@ -109,12 +109,12 @@
   </Target>
 
   <Target Name="BuildWhatsBoxRidNative" Condition="'$(RuntimeIdentifier)' != ''"
-          Inputs="$(NativeWhatsBoxSourceRoot)\cmd\**\*.go;$(NativeWhatsBoxSourceRoot)\internal\**\*.go;$(NativeWhatsBoxSourceRoot)\go.mod;$(NativeWhatsBoxSourceRoot)\go.sum"
+          Inputs="$(NativeWhatsBoxSourceRoot)\**\*.go;$(NativeWhatsBoxSourceRoot)\go.mod;$(NativeWhatsBoxSourceRoot)\go.sum"
           Outputs="$(_WhatsBoxRidNativeBinary)">
     <Error Condition="'$(_WhatsBoxRidGoos)' == '' or '$(_WhatsBoxRidGoarch)' == ''"
            Text="Unsupported RuntimeIdentifier '$(RuntimeIdentifier)'. Supported: $(RuntimeIdentifiers)." />
     <MakeDir Directories="$(_WhatsBoxRidNativeDir)" />
-    <Exec Command="go build -o &quot;$(_WhatsBoxRidNativeBinary)&quot; ./cmd/whatsbox"
+    <Exec Command="go build -o &quot;$(_WhatsBoxRidNativeBinary)&quot; ."
           WorkingDirectory="$(NativeWhatsBoxSourceRoot)"
           EnvironmentVariables="CGO_ENABLED=0;GOOS=$(_WhatsBoxRidGoos);GOARCH=$(_WhatsBoxRidGoarch)" />
   </Target>

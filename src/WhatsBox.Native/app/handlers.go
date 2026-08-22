@@ -7,11 +7,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/devlooped/whatsbox/internal/dirstore"
-	"github.com/devlooped/whatsbox/internal/files"
-	"github.com/devlooped/whatsbox/internal/rpc"
-	"github.com/devlooped/whatsbox/internal/topic"
-	"github.com/devlooped/whatsbox/internal/wa"
+	"github.com/devlooped/whatsbox/dirstore"
+	"github.com/devlooped/whatsbox/files"
+	"github.com/devlooped/whatsbox/rpc"
+	"github.com/devlooped/whatsbox/topic"
+	"github.com/devlooped/whatsbox/wa"
 )
 
 type topicsParams struct {

@@ -14,10 +14,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/devlooped/whatsbox/internal/app"
-	"github.com/devlooped/whatsbox/internal/dirstore"
-	"github.com/devlooped/whatsbox/internal/rpc"
-	"github.com/devlooped/whatsbox/internal/wa"
+	"github.com/devlooped/whatsbox/app"
+	"github.com/devlooped/whatsbox/dirstore"
+	"github.com/devlooped/whatsbox/rpc"
+	"github.com/devlooped/whatsbox/wa"
 )
 
 // testClient drives the shipped NDJSON Run loop with a fake WhatsApp client.
@@ -1010,7 +1010,7 @@ func TestChatEventsDiscardOverflowSendRead(t *testing.T) {
 		t.Fatalf("empty send: %#v", err)
 	}
 	reac := c.mustCall("messages.send", map[string]any{
-		"to": "999@lid",
+		"to":       "999@lid",
 		"contents": []map[string]any{{"type": "reaction", "target": "t1", "by": "999@lid", "emoji": ""}},
 	})
 	if reac["id"] == "" {
@@ -1025,14 +1025,14 @@ func TestChatEventsDiscardOverflowSendRead(t *testing.T) {
 		t.Fatal(err)
 	}
 	media := c.mustCall("messages.send", map[string]any{
-		"to": "999@lid",
+		"to":       "999@lid",
 		"contents": []map[string]any{{"type": "image", "path": "out/photo.jpg"}},
 	})
 	if media["topic"] != "999@lid" {
 		t.Fatalf("path send=%v", media)
 	}
 	_, err = c.call("messages.send", map[string]any{
-		"to": "999@lid",
+		"to":       "999@lid",
 		"contents": []map[string]any{{"type": "image", "path": "../secret.jpg"}},
 	})
 	if err == nil || err.Message != rpc.TokPathEscape {
@@ -1138,7 +1138,7 @@ func TestFilesRequiredOnSendPath(t *testing.T) {
 	c := startDaemon(t, fake, 0)
 	_ = c.mustInit(map[string]any{"connect": true})
 	_, err := c.call("messages.send", map[string]any{
-		"to": "999@lid",
+		"to":       "999@lid",
 		"contents": []map[string]any{{"type": "image", "path": "out/a.jpg"}},
 	})
 	if err == nil || err.Message != rpc.TokFilesRequired {
