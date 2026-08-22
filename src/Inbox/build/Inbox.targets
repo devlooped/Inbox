@@ -1,0 +1,81 @@
+<Project>
+  <!--
+    Auto-imported from the Inbox nupkg via build/Inbox.targets (not buildTransitive).
+    Adapters that ProjectReference Inbox must Import this file themselves.
+    Pointer + RID native packing applies only when the adapter sets RuntimeIdentifiers.
+    Without that, this is just InboxClient — no runtime.json, no PackageId suffix.
+  -->
+  <PropertyGroup>
+    <InboxTargetsImported>true</InboxTargetsImported>
+    <InboxPackageId Condition="'$(InboxPackageId)' == ''">$(PackageId)</InboxPackageId>
+  </PropertyGroup>
+
+  <!-- Pointer + RID pack split is opt-in: the adapter must declare RuntimeIdentifiers. -->
+  <PropertyGroup Condition="'$(RuntimeIdentifiers)' != ''">
+    <NoWarn>$(NoWarn);NU5128</NoWarn>
+    <IncludeBuildOutput Condition="'$(RuntimeIdentifier)' == ''">true</IncludeBuildOutput>
+    <IncludeBuildOutput Condition="'$(RuntimeIdentifier)' != ''">false</IncludeBuildOutput>
+    <SuppressDependenciesWhenPacking Condition="'$(RuntimeIdentifier)' != ''">true</SuppressDependenciesWhenPacking>
+    <PackageId Condition="'$(RuntimeIdentifier)' != ''">$(InboxPackageId).$(RuntimeIdentifier)</PackageId>
+    <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);PackInboxNativeBinary</TargetsForTfmSpecificContentInPackage>
+  </PropertyGroup>
+
+  <!-- Nupkg layout: task assemblies sit next to this file. P2P imports rely on a JsonPoke/JsonPeek PackageReference in the adapter. -->
+  <UsingTask TaskName="JsonPoke" AssemblyFile="$(MSBuildThisFileDirectory)JsonPoke.dll" Condition="Exists('$(MSBuildThisFileDirectory)JsonPoke.dll')" />
+  <UsingTask TaskName="JsonPeek" AssemblyFile="$(MSBuildThisFileDirectory)JsonPeek.dll" Condition="Exists('$(MSBuildThisFileDirectory)JsonPeek.dll')" />
+
+  <Target Name="WriteInboxRuntimeJson"
+          BeforeTargets="_GetPackageFiles;GenerateNuspec"
+          Condition="'$(RuntimeIdentifiers)' != '' and '$(RuntimeIdentifier)' == ''">
+    <PropertyGroup>
+      <_InboxRuntimeJson>$([System.IO.Path]::GetFullPath('$(IntermediateOutputPath)runtime.json'))</_InboxRuntimeJson>
+    </PropertyGroup>
+    <ItemGroup>
+      <_InboxRid Include="$(RuntimeIdentifiers)" />
+    </ItemGroup>
+    <Error Condition="'@(_InboxRid)' == ''" Text="Inbox pointer pack requires RuntimeIdentifiers so runtime.json can map RID packages." />
+    <MakeDir Directories="$([System.IO.Path]::GetDirectoryName($(_InboxRuntimeJson)))" />
+    <WriteLinesToFile File="$(_InboxRuntimeJson)" Lines="{&quot;runtimes&quot;:{}}" Overwrite="true" />
+    <JsonPoke
+      ContentPath="$(_InboxRuntimeJson)"
+      Query="$.runtimes['%(_InboxRid.Identity)'].$(InboxPackageId)['$(InboxPackageId).%(_InboxRid.Identity)']"
+      Value="'[$(Version), )'" />
+    <JsonPeek ContentPath="$(_InboxRuntimeJson)" Query="$.runtimes">
+      <Output TaskParameter="Result" ItemName="_InboxWrittenRuntimes" />
+    </JsonPeek>
+    <Error
+      Condition="'@(_InboxWrittenRuntimes)' == ''"
+      Text="runtime.json has no runtimes after writing RIDs from RuntimeIdentifiers." />
+    <ItemGroup>
+      <None Include="$(_InboxRuntimeJson)" Pack="true" PackagePath="runtime.json" />
+    </ItemGroup>
+  </Target>
+
+  <Target Name="IncludeInboxNative"
+          AfterTargets="$(InboxIncludeNativeAfterTargets)"
+          BeforeTargets="GetCopyToOutputDirectoryItems;AssignTargetPaths"
+          Condition="'$(RuntimeIdentifiers)' != '' and '$(RuntimeIdentifier)' == '' and '$(InboxNativeBinary)' != ''">
+    <PropertyGroup>
+      <_InboxNativeTargetPath Condition="'$(InboxNativeName)' != ''">$(InboxNativeName)</_InboxNativeTargetPath>
+      <_InboxNativeTargetPath Condition="'$(_InboxNativeTargetPath)' == ''">$([System.IO.Path]::GetFileName($(InboxNativeBinary)))</_InboxNativeTargetPath>
+    </PropertyGroup>
+    <ItemGroup>
+      <ContentWithTargetPath Include="$(InboxNativeBinary)" Condition="Exists('$(InboxNativeBinary)')">
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+        <TargetPath>$(_InboxNativeTargetPath)</TargetPath>
+        <Visible>false</Visible>
+        <Pack>false</Pack>
+      </ContentWithTargetPath>
+    </ItemGroup>
+  </Target>
+
+  <Target Name="PackInboxNativeBinary" DependsOnTargets="$(InboxPackNativeDependsOn)" Condition="'$(RuntimeIdentifiers)' != '' and '$(RuntimeIdentifier)' != ''" Returns="@(TfmSpecificPackageFile)">
+    <Error Condition="'$(InboxNativeBinary)' == '' or !Exists('$(InboxNativeBinary)')" Text="Inbox RID pack requires InboxNativeBinary so the RID package can expose runtimes/$(RuntimeIdentifier)/native/." />
+    <ItemGroup>
+      <TfmSpecificPackageFile Include="$(InboxNativeBinary)">
+        <PackagePath>runtimes/$(RuntimeIdentifier)/native/</PackagePath>
+      </TfmSpecificPackageFile>
+    </ItemGroup>
+  </Target>
+</Project>

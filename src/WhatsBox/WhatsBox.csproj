@@ -1,32 +1,26 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <PackageId>WhatsBox</PackageId>
-    <PackageId Condition="'$(RuntimeIdentifier)' != ''">WhatsBox.$(RuntimeIdentifier)</PackageId>
     <RootNamespace>WhatsBox</RootNamespace>
     <AssemblyName>WhatsBox</AssemblyName>
     <Description>WhatsApp Inbox Protocol host: PackageReference WhatsBox and publish for your RID to get the native whatsbox sidecar plus the managed Inbox client.</Description>
     <IsAotCompatible>true</IsAotCompatible>
     <RuntimeIdentifiers>win-x64;win-arm64;linux-x64;linux-arm64;osx-x64;osx-arm64</RuntimeIdentifiers>
     <IsPackable>true</IsPackable>
-    <IncludeBuildOutput Condition="'$(RuntimeIdentifier)' == ''">true</IncludeBuildOutput>
-    <IncludeBuildOutput Condition="'$(RuntimeIdentifier)' != ''">false</IncludeBuildOutput>
-    <SuppressDependenciesWhenPacking Condition="'$(RuntimeIdentifier)' != ''">true</SuppressDependenciesWhenPacking>
-    <NoWarn>$(NoWarn);NU5128</NoWarn>
-    <NativeWhatsBoxName Condition="$([MSBuild]::IsOSPlatform('Windows'))">whatsbox.exe</NativeWhatsBoxName>
-    <NativeWhatsBoxName Condition="'$(NativeWhatsBoxName)' == ''">whatsbox</NativeWhatsBoxName>
+    <InboxNativeName>whatsbox</InboxNativeName>
+    <InboxNativeName Condition="$([MSBuild]::IsOSPlatform('Windows'))">whatsbox.exe</InboxNativeName>
+    <InboxNativeBinary>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)$(BaseIntermediateOutputPath)native\$(InboxNativeName)'))</InboxNativeBinary>
     <NativeWhatsBoxSourceRoot>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\WhatsBox.Native'))</NativeWhatsBoxSourceRoot>
-    <NativeWhatsBoxOutput>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)$(BaseIntermediateOutputPath)native\$(NativeWhatsBoxName)'))</NativeWhatsBoxOutput>
+    <InboxIncludeNativeAfterTargets>BuildNativeWhatsBox</InboxIncludeNativeAfterTargets>
+    <InboxPackNativeDependsOn>BuildWhatsBoxRidNative</InboxPackNativeDependsOn>
   </PropertyGroup>
 
   <!--
-    Pointer (`dotnet pack`): lib/net10.0/WhatsBox.dll + runtime.json.
+    Pointer (`dotnet pack`): lib/net10.0/WhatsBox.dll + runtime.json (Inbox.targets).
     RID (`dotnet pack -r`): runtimes/{rid}/native/whatsbox[.exe] from the Go sidecar.
     Not PackAsTool — a DotnetTool pointer cannot be PackageReferenced (NU1212).
   -->
-  <PropertyGroup>
-    <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);PackWhatsBoxNativeBinary</TargetsForTfmSpecificContentInPackage>
-  </PropertyGroup>
 
   <PropertyGroup Condition="'$(RuntimeIdentifier)' != ''">
     <_WhatsBoxRidGoos Condition="$(RuntimeIdentifier.StartsWith('win-'))">windows</_WhatsBoxRidGoos>
@@ -34,10 +28,9 @@
     <_WhatsBoxRidGoos Condition="$(RuntimeIdentifier.StartsWith('osx-'))">darwin</_WhatsBoxRidGoos>
     <_WhatsBoxRidGoarch Condition="$(RuntimeIdentifier.EndsWith('-x64'))">amd64</_WhatsBoxRidGoarch>
     <_WhatsBoxRidGoarch Condition="$(RuntimeIdentifier.EndsWith('-arm64'))">arm64</_WhatsBoxRidGoarch>
-    <_WhatsBoxRidNativeName Condition="$(RuntimeIdentifier.StartsWith('win-'))">whatsbox.exe</_WhatsBoxRidNativeName>
-    <_WhatsBoxRidNativeName Condition="'$(_WhatsBoxRidNativeName)' == ''">whatsbox</_WhatsBoxRidNativeName>
-    <_WhatsBoxRidNativeDir>$([System.IO.Path]::GetFullPath('$(IntermediateOutputPath)runtimes\$(RuntimeIdentifier)\native\'))</_WhatsBoxRidNativeDir>
-    <_WhatsBoxRidNativeBinary>$(_WhatsBoxRidNativeDir)$(_WhatsBoxRidNativeName)</_WhatsBoxRidNativeBinary>
+    <InboxNativeName>whatsbox</InboxNativeName>
+    <InboxNativeName Condition="$(RuntimeIdentifier.StartsWith('win-'))">whatsbox.exe</InboxNativeName>
+    <InboxNativeBinary>$([System.IO.Path]::GetFullPath('$(IntermediateOutputPath)runtimes\$(RuntimeIdentifier)\native\$(InboxNativeName)'))</InboxNativeBinary>
   </PropertyGroup>
 
   <ItemGroup>
@@ -45,86 +38,31 @@
     <PackageReference Include="JsonPeek" Version="1.3.0" PrivateAssets="all" />
     <PackageReference Include="JsonPoke" Version="1.3.0" PrivateAssets="all" />
     <PackageReference Include="Readme" Version="1.2.1" PrivateAssets="all" />
-    <ProjectReference Include="..\Inbox\Inbox.csproj" PrivateAssets="all" />
+    <ProjectReference Include="..\Inbox\Inbox.csproj" />
     <InternalsVisibleTo Include="Tests" />
   </ItemGroup>
 
-  <PropertyGroup>
-    <TargetsForTfmSpecificBuildOutput>$(TargetsForTfmSpecificBuildOutput);PackInboxReferenceOutput</TargetsForTfmSpecificBuildOutput>
-  </PropertyGroup>
-
-  <Target Name="PackInboxReferenceOutput" DependsOnTargets="BuildOnlySettings;ResolveReferences" Condition="'$(RuntimeIdentifier)' == ''">
-    <ItemGroup>
-      <BuildOutputInPackage Include="@(ReferenceCopyLocalPaths)" Condition="'%(Filename)' == 'Inbox'">
-        <TargetPath>%(Filename)%(Extension)</TargetPath>
-      </BuildOutputInPackage>
-    </ItemGroup>
-  </Target>
-
   <!-- Build the current-OS whatsbox next to this project so project-reference copy lands it in the consumer outdir. -->
-  <Target Name="BuildNativeWhatsBox" BeforeTargets="BeforeCompile;GetCopyToOutputDirectoryItems;AssignTargetPaths" Inputs="$(NativeWhatsBoxSourceRoot)\**\*.go;$(NativeWhatsBoxSourceRoot)\go.mod;$(NativeWhatsBoxSourceRoot)\go.sum" Outputs="$(NativeWhatsBoxOutput)">
-    <MakeDir Directories="$([System.IO.Path]::GetDirectoryName($(NativeWhatsBoxOutput)))" />
-    <Exec Command="go build -o &quot;$(NativeWhatsBoxOutput)&quot; ." WorkingDirectory="$(NativeWhatsBoxSourceRoot)" EnvironmentVariables="CGO_ENABLED=0" />
-  </Target>
-
-  <Target Name="IncludeNativeWhatsBox" AfterTargets="BuildNativeWhatsBox" BeforeTargets="GetCopyToOutputDirectoryItems;AssignTargetPaths">
-    <ItemGroup>
-      <ContentWithTargetPath Include="$(NativeWhatsBoxOutput)" Condition="Exists('$(NativeWhatsBoxOutput)')">
-        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-        <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-        <TargetPath>$(NativeWhatsBoxName)</TargetPath>
-        <Visible>false</Visible>
-        <Pack>false</Pack>
-      </ContentWithTargetPath>
-    </ItemGroup>
-  </Target>
-
-  <Target Name="WriteWhatsBoxRuntimeJson"
-          BeforeTargets="_GetPackageFiles;GenerateNuspec"
-          Condition="'$(RuntimeIdentifier)' == ''">
-    <PropertyGroup>
-      <_WhatsBoxRuntimeJson>$([System.IO.Path]::GetFullPath('$(IntermediateOutputPath)runtime.json'))</_WhatsBoxRuntimeJson>
-    </PropertyGroup>
-    <ItemGroup>
-      <_WhatsBoxRid Include="$(RuntimeIdentifiers)" />
-    </ItemGroup>
-    <Copy
-      SourceFiles="$(MSBuildThisFileDirectory)runtime.json"
-      DestinationFiles="$(_WhatsBoxRuntimeJson)"
-      SkipUnchangedFiles="false"
-      OverwriteReadOnlyFiles="true" />
-    <JsonPoke
-      ContentPath="$(_WhatsBoxRuntimeJson)"
-      Query="$.runtimes['%(_WhatsBoxRid.Identity)'].WhatsBox['WhatsBox.%(_WhatsBoxRid.Identity)']"
-      Value="'[$(Version), )'" />
-    <JsonPeek ContentPath="$(_WhatsBoxRuntimeJson)" Query="$.runtimes">
-      <Output TaskParameter="Result" ItemName="_WhatsBoxWrittenRuntimes" />
-    </JsonPeek>
-    <Error
-      Condition="'@(_WhatsBoxWrittenRuntimes)' == ''"
-      Text="runtime.json has no runtimes after writing RIDs from RuntimeIdentifiers." />
-    <ItemGroup>
-      <None Include="$(_WhatsBoxRuntimeJson)" Pack="true" PackagePath="runtime.json" />
-    </ItemGroup>
+  <Target Name="BuildNativeWhatsBox" Condition="'$(RuntimeIdentifier)' == ''" 
+          BeforeTargets="BeforeCompile;GetCopyToOutputDirectoryItems;AssignTargetPaths" 
+          Inputs="$(NativeWhatsBoxSourceRoot)\**\*.go;$(NativeWhatsBoxSourceRoot)\go.mod;$(NativeWhatsBoxSourceRoot)\go.sum" 
+          Outputs="$(InboxNativeBinary)">
+    <MakeDir Directories="$([System.IO.Path]::GetDirectoryName($(InboxNativeBinary)))" />
+    <Exec Command="go build -o &quot;$(InboxNativeBinary)&quot; ." 
+          WorkingDirectory="$(NativeWhatsBoxSourceRoot)" 
+          EnvironmentVariables="CGO_ENABLED=0" />
   </Target>
 
   <Target Name="BuildWhatsBoxRidNative" Condition="'$(RuntimeIdentifier)' != ''"
           Inputs="$(NativeWhatsBoxSourceRoot)\**\*.go;$(NativeWhatsBoxSourceRoot)\go.mod;$(NativeWhatsBoxSourceRoot)\go.sum"
-          Outputs="$(_WhatsBoxRidNativeBinary)">
+          Outputs="$(InboxNativeBinary)">
     <Error Condition="'$(_WhatsBoxRidGoos)' == '' or '$(_WhatsBoxRidGoarch)' == ''"
            Text="Unsupported RuntimeIdentifier '$(RuntimeIdentifier)'. Supported: $(RuntimeIdentifiers)." />
-    <MakeDir Directories="$(_WhatsBoxRidNativeDir)" />
-    <Exec Command="go build -o &quot;$(_WhatsBoxRidNativeBinary)&quot; ."
+    <MakeDir Directories="$([System.IO.Path]::GetDirectoryName($(InboxNativeBinary)))" />
+    <Exec Command="go build -o &quot;$(InboxNativeBinary)&quot; ."
           WorkingDirectory="$(NativeWhatsBoxSourceRoot)"
           EnvironmentVariables="CGO_ENABLED=0;GOOS=$(_WhatsBoxRidGoos);GOARCH=$(_WhatsBoxRidGoarch)" />
   </Target>
 
-  <Target Name="PackWhatsBoxNativeBinary" DependsOnTargets="BuildWhatsBoxRidNative" Condition="'$(RuntimeIdentifier)' != ''" Returns="@(TfmSpecificPackageFile)">
-    <Error Condition="!Exists('$(_WhatsBoxRidNativeBinary)')" Text="Expected Go native binary '$(_WhatsBoxRidNativeBinary)' so the RID package can expose runtimes/$(RuntimeIdentifier)/native/." />
-    <ItemGroup>
-      <TfmSpecificPackageFile Include="$(_WhatsBoxRidNativeBinary)">
-        <PackagePath>runtimes/$(RuntimeIdentifier)/native/</PackagePath>
-      </TfmSpecificPackageFile>
-    </ItemGroup>
-  </Target>
+  <Import Project="..\Inbox\build\Inbox.targets" Condition="'$(InboxTargetsImported)' != 'true'" />
 </Project>
