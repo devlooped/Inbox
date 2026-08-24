@@ -95,7 +95,7 @@ public class WhatsBoxPackTests
     public void Pointer_and_rid_csproj_use_calc_pack_split()
     {
         var repo = FindRepoRoot();
-        var slnx = File.ReadAllText(Path.Combine(repo, "WhatsBox.slnx"));
+        var slnx = File.ReadAllText(Path.Combine(repo, "Inbox.slnx"));
         Assert.Contains("src/Inbox/Inbox.csproj", slnx);
         var inbox = File.ReadAllText(Path.Combine(repo, "src", "Inbox", "Inbox.csproj"));
         Assert.Contains("<PackageId>Inbox</PackageId>", inbox);
@@ -232,11 +232,11 @@ public class WhatsBoxPackTests
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
         while (dir is not null)
         {
-            if (File.Exists(Path.Combine(dir.FullName, "WhatsBox.slnx")))
+            if (File.Exists(Path.Combine(dir.FullName, "Inbox.slnx")))
                 return dir.FullName;
             dir = dir.Parent;
         }
 
-        throw new InvalidOperationException("Could not find WhatsBox.slnx from " + AppContext.BaseDirectory);
+        throw new InvalidOperationException("Could not find Inbox.slnx from " + AppContext.BaseDirectory);
     }
 }

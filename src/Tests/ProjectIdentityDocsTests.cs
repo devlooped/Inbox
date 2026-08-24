@@ -229,11 +229,11 @@ public class ProjectIdentityDocsTests
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
         while (dir is not null)
         {
-            if (File.Exists(Path.Combine(dir.FullName, "WhatsBox.slnx")))
+            if (File.Exists(Path.Combine(dir.FullName, "Inbox.slnx")))
                 return dir.FullName;
             dir = dir.Parent;
         }
 
-        throw new InvalidOperationException("Could not find WhatsBox.slnx from " + AppContext.BaseDirectory);
+        throw new InvalidOperationException("Could not find Inbox.slnx from " + AppContext.BaseDirectory);
     }
 }
