@@ -1,56 +1,72 @@
+using System.Text.Json.Serialization;
+
 namespace Inbox;
+
+/// <summary>INBOX.md session <c>status</c>.</summary>
+[JsonConverter(typeof(JsonStringEnumConverter<SessionStatus>))]
+public enum SessionStatus
+{
+    /// <summary>No session in the store.</summary>
+    [JsonStringEnumMemberName("new")]
+    New,
+
+    /// <summary>Keys/tokens exist, connection down.</summary>
+    [JsonStringEnumMemberName("offline")]
+    Offline,
+
+    /// <summary>Send and receive are up.</summary>
+    [JsonStringEnumMemberName("online")]
+    Online,
+}
+
+/// <summary>INBOX.md <c>identity</c>.</summary>
+[JsonConverter(typeof(JsonStringEnumConverter<Identity>))]
+public enum Identity
+{
+    [JsonStringEnumMemberName("user")]
+    User,
+
+    [JsonStringEnumMemberName("bot")]
+    Bot,
+}
+
+/// <summary>INBOX.md directory <c>kind</c>: <c>user</c> or <c>group</c>.</summary>
+[JsonConverter(typeof(JsonStringEnumConverter<DirectoryKind>))]
+public enum DirectoryKind
+{
+    [JsonStringEnumMemberName("user")]
+    User,
+
+    [JsonStringEnumMemberName("group")]
+    Group,
+}
 
 /// <summary>Result of <c>initialize</c> and the <c>session.*</c> methods.</summary>
 public sealed record SessionSnapshot
 {
-    /// <summary><c>new</c>, <c>offline</c>, or <c>online</c>.</summary>
-    public required string Status { get; init; }
+    /// <summary><see cref="SessionStatus.New"/>, <see cref="SessionStatus.Offline"/>, or <see cref="SessionStatus.Online"/>.</summary>
+    public required SessionStatus Status { get; init; }
 
     /// <summary>Current subscription set. Always includes <c>$session</c>.</summary>
     public IReadOnlyList<string> Topics { get; init; } = [];
 
-    /// <summary>Paired account LID. Omitted when <see cref="Status"/> is <c>new</c>.</summary>
+    /// <summary>Paired product identity. Omitted when <see cref="Status"/> is <see cref="SessionStatus.New"/>.</summary>
     public string? Me { get; init; }
 
-    /// <summary>Protocol version, present on <c>initialize</c> (and connect-as-init).</summary>
+    /// <summary>Protocol version, present on <c>initialize</c> (and connect-as-init). v1 is <c>0.1</c>.</summary>
     public string? Version { get; init; }
 
-    /// <summary>INBOX.md product id, e.g. <c>whatsapp</c>.</summary>
+    /// <summary>INBOX.md product id (e.g. <c>whatsapp</c>, <c>webpubsub</c>).</summary>
     public string? Product { get; init; }
 
-    /// <summary>INBOX.md identity, e.g. <c>user</c> or <c>bot</c>.</summary>
-    public string? Identity { get; init; }
+    /// <summary>INBOX.md identity.</summary>
+    public Identity? Identity { get; init; }
 
-    /// <summary>Optional stack when it differs from <see cref="Identity"/>.</summary>
+    /// <summary>Optional stack when it differs from <see cref="Identity"/> (e.g. <c>hub</c>).</summary>
     public string? Profile { get; init; }
 
     /// <summary>Advertised capabilities. Required on a conformant daemon.</summary>
     public Capabilities? Capabilities { get; init; }
-}
-
-/// <summary>INBOX.md <c>capabilities</c> object on <c>initialize</c> / <c>session.status</c>.</summary>
-public sealed record Capabilities
-{
-    /// <summary>How pair authenticates: <c>qr</c>, <c>oauth</c>, <c>device_code</c>, <c>token</c>.</summary>
-    public IReadOnlyList<string> Auth { get; init; } = [];
-
-    /// <summary><c>quote</c>, <c>context</c>, or <c>none</c>.</summary>
-    public string? Reply { get; init; }
-
-    /// <summary>Whether a <c>reaction</c> content part is supported.</summary>
-    public bool React { get; init; }
-
-    /// <summary><c>message</c>, <c>cursor</c>, <c>conversation</c>, or <c>none</c>.</summary>
-    public string? Read { get; init; }
-
-    /// <summary>Whether <c>kind: ack</c> events are emitted.</summary>
-    public bool Ack { get; init; }
-
-    /// <summary>Whether the product can move blobs through <c>initialize.files</c>.</summary>
-    public bool Files { get; init; }
-
-    /// <summary><c>none</c>, <c>single</c>, or <c>many</c>.</summary>
-    public string? Attachments { get; init; }
 }
 
 /// <summary>Result of <c>subscribe</c> / <c>unsubscribe</c>.</summary>
@@ -76,8 +92,8 @@ public sealed record DirectoryRow
     /// <summary>Canonical JID.</summary>
     public required string Topic { get; init; }
 
-    /// <summary><c>user</c> or <c>group</c>.</summary>
-    public required string Kind { get; init; }
+    /// <summary><see cref="DirectoryKind.User"/> or <see cref="DirectoryKind.Group"/>.</summary>
+    public required DirectoryKind Kind { get; init; }
 
     /// <summary>Best display name.</summary>
     public string? Name { get; init; }
@@ -136,7 +152,14 @@ public sealed record SendResult
 /// <summary>Result of <c>messages.read</c>.</summary>
 public sealed record ReadResult
 {
-    /// <summary>Canonical chat JID.</summary>
+    /// <summary>Canonical chat topic.</summary>
+    public required string Topic { get; init; }
+}
+
+/// <summary>Result of <c>directory.join</c>, <c>directory.leave</c>, and <c>directory.create</c>.</summary>
+public sealed record TopicResult
+{
+    /// <summary>Canonical chat topic.</summary>
     public required string Topic { get; init; }
 }
 

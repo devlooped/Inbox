@@ -350,7 +350,7 @@ func TestNotInitializedAndAlreadyInitialized(t *testing.T) {
 		t.Fatalf("product/identity=%v %v", res["product"], res["identity"])
 	}
 	caps, _ := res["capabilities"].(map[string]any)
-	if caps["reply"] != "quote" || caps["read"] != "message" || caps["attachments"] != "single" {
+	if caps["reply"] != "quote" || caps["read"] != "message" || caps["attachments"] != "single" || caps["me"] != "issued" || caps["membership"] != "none" {
 		t.Fatalf("capabilities=%v", caps)
 	}
 	topics := asStrings(res["topics"])
@@ -363,6 +363,30 @@ func TestNotInitializedAndAlreadyInitialized(t *testing.T) {
 	_, err = c.init(nil)
 	if err == nil || err.Message != rpc.TokAlreadyInitialized {
 		t.Fatalf("want already_initialized, got %#v", err)
+	}
+}
+
+func TestIssuedMeRejectsClaimedMeAndMembershipRpcs(t *testing.T) {
+	fake := wa.NewFake()
+	c := startDaemon(t, fake, 0)
+	_, err := c.call("initialize", map[string]any{"version": "0.1", "store": c.store, "me": "alice"})
+	if err == nil || err.Message != rpc.TokInvalidParams {
+		t.Fatalf("initialize me: %#v", err)
+	}
+	c.mustInit(map[string]any{"connect": false})
+	_, err = c.call("session.pair", map[string]any{"me": "alice"})
+	if err == nil || err.Message != rpc.TokInvalidParams {
+		t.Fatalf("pair me: %#v", err)
+	}
+	for _, method := range []string{"directory.find", "directory.join", "directory.leave", "directory.create"} {
+		_, err = c.call(method, map[string]any{"query": "x", "id": "x", "name": "x"})
+		if err == nil || err.Message != rpc.TokUnsupported {
+			t.Fatalf("%s: %#v", method, err)
+		}
+		data, _ := err.Data.(map[string]any)
+		if data["capability"] != "membership" {
+			t.Fatalf("%s data=%v", method, err.Data)
+		}
 	}
 }
 

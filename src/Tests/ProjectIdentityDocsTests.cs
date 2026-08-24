@@ -135,6 +135,23 @@ public class ProjectIdentityDocsTests
     }
 
     [Fact]
+    public void PubSubBox_profile_is_the_adapter_not_the_protocol()
+    {
+        var text = File.ReadAllText(Path.Combine(Repo, "docs", "PUBSUBBOX.md"));
+        var firstRule = text.IndexOf("---", StringComparison.Ordinal);
+        Assert.True(firstRule > 0, "PUBSUBBOX.md intro missing horizontal rule");
+        var intro = text[..firstRule];
+
+        Assert.Contains("Azure Web PubSub Chat adapter", intro, StringComparison.Ordinal);
+        Assert.Contains("Inbox Client Protocol (ICP)", intro, StringComparison.Ordinal);
+        Assert.Contains("`pubsubbox`", intro, StringComparison.Ordinal);
+        Assert.DoesNotContain("grokbox.local", intro, StringComparison.Ordinal);
+        Assert.Contains("content.binary", text, StringComparison.Ordinal);
+        Assert.Contains("x-ms-meta-text", text, StringComparison.Ordinal);
+        Assert.Contains("claimed", text, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Osmf_software_name_is_Inbox()
     {
         var text = File.ReadAllText(Path.Combine(Repo, "osmfeula.txt"));

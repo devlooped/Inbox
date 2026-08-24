@@ -25,6 +25,8 @@ const (
 	CodeInvalidParams      = -32013
 	CodeDisconnected       = -32014
 	CodeUnsupported        = -32015
+	CodeMeRequired         = -32016
+	CodeTopicTaken         = -32017
 	CodeParseError         = -32700
 	CodeInvalidRequest     = -32600
 	CodeMethodNotFound     = -32601
@@ -46,6 +48,8 @@ const (
 	TokInvalidParams      = "invalid_params"
 	TokDisconnected       = "disconnected"
 	TokUnsupported        = "unsupported"
+	TokMeRequired         = "me_required"
+	TokTopicTaken         = "topic_taken"
 	TokParseError         = "parse_error"
 	TokInvalidRequest     = "invalid_request"
 	TokMethodNotFound     = "method_not_found"
@@ -108,6 +112,8 @@ var tokenCode = map[string]int{
 	TokInvalidParams:      CodeInvalidParams,
 	TokDisconnected:       CodeDisconnected,
 	TokUnsupported:        CodeUnsupported,
+	TokMeRequired:         CodeMeRequired,
+	TokTopicTaken:         CodeTopicTaken,
 	TokParseError:         CodeParseError,
 	TokInvalidRequest:     CodeInvalidRequest,
 	TokMethodNotFound:     CodeMethodNotFound,

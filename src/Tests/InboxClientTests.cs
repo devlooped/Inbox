@@ -93,7 +93,7 @@ public class InboxClientTests
         Assert.Equal("2@live", qr.Code);
 
         var status = await statusTask.WaitAsync(TimeSpan.FromSeconds(5));
-        Assert.Equal("new", status.Status);
+        Assert.Equal(SessionStatus.New, status.Status);
         Assert.Contains("$session", status.Topics);
 
         stdout.Complete();
@@ -155,6 +155,68 @@ public class InboxClientTests
     }
 
     [Fact]
+    public async Task Directory_membership_and_claimed_pair_write_spec_methods()
+    {
+        var stdout = new LineSource();
+        var stdin = new LineSink();
+        await using var client = new InboxClient(stdout, stdin);
+
+        var find = client.FindDirectoryAsync(new DirectoryListOptions { Query = "falcon", Kind = DirectoryKind.Group });
+        var findLine = await stdin.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(5));
+        using (var req = JsonDocument.Parse(findLine))
+        {
+            Assert.Equal("directory.find", req.RootElement.GetProperty("method").GetString());
+            var p = req.RootElement.GetProperty("params");
+            Assert.Equal("falcon", p.GetProperty("query").GetString());
+            Assert.Equal("group", p.GetProperty("kind").GetString());
+            stdout.WriteLine($"{{\"jsonrpc\":\"2.0\",\"id\":\"{req.RootElement.GetProperty("id").GetString()}\",\"result\":{{\"items\":[{{\"topic\":\"falcon\",\"kind\":\"group\",\"name\":\"Falcon\"}}]}}}}");
+        }
+        Assert.Equal("falcon", Assert.Single((await find.WaitAsync(TimeSpan.FromSeconds(5))).Items).Topic);
+
+        var join = client.JoinDirectoryAsync("falcon");
+        var joinLine = await stdin.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(5));
+        using (var req = JsonDocument.Parse(joinLine))
+        {
+            Assert.Equal("directory.join", req.RootElement.GetProperty("method").GetString());
+            Assert.Equal("falcon", req.RootElement.GetProperty("params").GetProperty("id").GetString());
+            stdout.WriteLine($"{{\"jsonrpc\":\"2.0\",\"id\":\"{req.RootElement.GetProperty("id").GetString()}\",\"result\":{{\"topic\":\"falcon\"}}}}");
+        }
+        Assert.Equal("falcon", (await join.WaitAsync(TimeSpan.FromSeconds(5))).Topic);
+
+        var create = client.CreateDirectoryAsync("Project Falcon", topic: "falcon");
+        var createLine = await stdin.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(5));
+        using (var req = JsonDocument.Parse(createLine))
+        {
+            Assert.Equal("directory.create", req.RootElement.GetProperty("method").GetString());
+            var p = req.RootElement.GetProperty("params");
+            Assert.Equal("Project Falcon", p.GetProperty("name").GetString());
+            Assert.Equal("falcon", p.GetProperty("topic").GetString());
+            stdout.WriteLine($"{{\"jsonrpc\":\"2.0\",\"id\":\"{req.RootElement.GetProperty("id").GetString()}\",\"result\":{{\"topic\":\"falcon\"}}}}");
+        }
+        Assert.Equal("falcon", (await create.WaitAsync(TimeSpan.FromSeconds(5))).Topic);
+
+        var leave = client.LeaveDirectoryAsync("falcon");
+        var leaveLine = await stdin.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(5));
+        using (var req = JsonDocument.Parse(leaveLine))
+        {
+            Assert.Equal("directory.leave", req.RootElement.GetProperty("method").GetString());
+            stdout.WriteLine($"{{\"jsonrpc\":\"2.0\",\"id\":\"{req.RootElement.GetProperty("id").GetString()}\",\"result\":{{\"topic\":\"falcon\"}}}}");
+        }
+        Assert.Equal("falcon", (await leave.WaitAsync(TimeSpan.FromSeconds(5))).Topic);
+
+        var pair = client.PairAsync("alice");
+        var pairLine = await stdin.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(5));
+        using (var req = JsonDocument.Parse(pairLine))
+        {
+            Assert.Equal("session.pair", req.RootElement.GetProperty("method").GetString());
+            Assert.Equal("alice", req.RootElement.GetProperty("params").GetProperty("me").GetString());
+            stdout.WriteLine($"{{\"jsonrpc\":\"2.0\",\"id\":\"{req.RootElement.GetProperty("id").GetString()}\",\"result\":{{\"status\":\"online\",\"me\":\"alice\",\"topics\":[\"$session\"]}}}}");
+        }
+        Assert.Equal("alice", (await pair.WaitAsync(TimeSpan.FromSeconds(5))).Me);
+        stdout.Complete();
+    }
+
+    [Fact]
     public async Task Dispose_stops_native_child()
     {
         var host = WhatsBoxHost.Start();
@@ -169,7 +231,7 @@ public class InboxClientTests
             try
             {
                 var snap = await client.InitializeAsync(store).WaitAsync(TimeSpan.FromSeconds(30));
-                Assert.Equal("new", snap.Status);
+                Assert.Equal(SessionStatus.New, snap.Status);
             }
             finally
             {
@@ -251,7 +313,7 @@ public class InboxClientTests
         stdout.WriteLine(RpcResult(id!));
 
         var snap = await task.WaitAsync(TimeSpan.FromSeconds(5));
-        Assert.Equal("new", snap.Status);
+        Assert.Equal(SessionStatus.New, snap.Status);
         stdout.Complete();
     }
 
@@ -266,11 +328,17 @@ public class InboxClientTests
             await using var client = new InboxClient(host.StandardOutput, host.StandardInput, host, host.StandardError);
             var snap = await client.InitializeAsync(store).WaitAsync(TimeSpan.FromSeconds(30));
             Console.WriteLine($"initialize status={snap.Status}");
-            Assert.Equal("new", snap.Status);
+            Assert.Equal(SessionStatus.New, snap.Status);
             Assert.Contains("$session", snap.Topics);
+            Assert.Equal("whatsapp", snap.Product);
+            Assert.Equal(Identity.User, snap.Identity);
+            Assert.NotNull(snap.Capabilities);
+            Assert.Equal(MeBinding.Issued, snap.Capabilities.Me);
+            Assert.Equal(MembershipCapability.None, snap.Capabilities.Membership);
+            Assert.Contains(AuthKind.Qr, snap.Capabilities.Auth);
 
             var status = await client.StatusAsync().WaitAsync(TimeSpan.FromSeconds(10));
-            Assert.Equal("new", status.Status);
+            Assert.Equal(SessionStatus.New, status.Status);
         }
         finally
         {

@@ -92,7 +92,7 @@ public class AtMentionsTests
         book.Remember(new DirectoryRow
         {
             Topic = "5491159278282-1472673286@g.us",
-            Kind = "group",
+            Kind = DirectoryKind.Group,
             Name = "Nosotros",
         });
         var session = new DemoSession(book);

@@ -30,7 +30,7 @@ public class JsonPanelTests
     public void Directory_row_omits_nulls_and_keeps_camel_case()
     {
         var panel = JsonPanel.Render(
-            new DirectoryRow { Topic = "111@lid", Kind = "user", Name = "Ada" },
+            new DirectoryRow { Topic = "111@lid", Kind = DirectoryKind.User, Name = "Ada" },
             InboxJsonContext.Default.DirectoryRow);
 
         Assert.Contains("\"topic\": \"111@lid\"", panel);
@@ -44,7 +44,7 @@ public class JsonPanelTests
     public void Renders_spanish_accents_as_unicode_not_escapes()
     {
         var panel = JsonPanel.Render(
-            new DirectoryRow { Topic = "111@lid", Kind = "user", Name = "Analía Carvallo" },
+            new DirectoryRow { Topic = "111@lid", Kind = DirectoryKind.User, Name = "Analía Carvallo" },
             InboxJsonContext.Default.DirectoryRow);
 
         Assert.Contains("Analía Carvallo", panel);

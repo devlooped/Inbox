@@ -29,16 +29,30 @@ public sealed record InitializeOptions
 
     /// <summary>Default <see cref="DeviceName"/>: <c>whatsbox on {<see cref="Environment.MachineName"/>}</c>.</summary>
     public static string DefaultDeviceName { get; } = $"whatsbox on {Environment.MachineName}";
+
+    /// <summary>
+    /// Claimed product identity (<c>capabilities.me</c> is <c>claimed</c>).
+    /// Issued products must omit this; WhatsApp returns <c>invalid_params</c>.
+    /// Remembered for a later <c>session.pair</c> when <see cref="Connect"/> is false.
+    /// </summary>
+    public string? Me { get; init; }
+}
+
+/// <summary>INBOX.md §6.3 <c>session.pair</c> parameters.</summary>
+public sealed record SessionPairParams
+{
+    /// <summary>Claimed product identity. Issued products must omit.</summary>
+    public string? Me { get; init; }
 }
 
 /// <summary>INBOX.md §5.8 / §13 <c>directory.list</c> parameters.</summary>
 public sealed record DirectoryListOptions
 {
-    /// <summary>Optional match against name, <c>pn</c>, <c>handle</c>, and JID string.</summary>
+    /// <summary>Optional match against name, <c>pn</c>, <c>handle</c>, and topic string.</summary>
     public string? Query { get; init; }
 
-    /// <summary>Optional. <c>user</c> or <c>group</c>.</summary>
-    public string? Kind { get; init; }
+    /// <summary>Optional. <see cref="DirectoryKind.User"/> or <see cref="DirectoryKind.Group"/>.</summary>
+    public DirectoryKind? Kind { get; init; }
 
     /// <summary>Page size. Implementation default applies when omitted.</summary>
     public int? Limit { get; init; }
@@ -68,6 +82,23 @@ public sealed record DirectoryGetParams
     /// <c>true</c> without files is <c>files_required</c>.
     /// </summary>
     public bool? Icon { get; init; }
+}
+
+/// <summary>INBOX.md <c>directory.join</c> / <c>directory.leave</c> params.</summary>
+public sealed record DirectoryTopicParams
+{
+    /// <summary>Canonical topic only.</summary>
+    public required string Id { get; init; }
+}
+
+/// <summary>INBOX.md <c>directory.create</c> params.</summary>
+public sealed record DirectoryCreateParams
+{
+    /// <summary>Group display name.</summary>
+    public required string Name { get; init; }
+
+    /// <summary>Optional claimed topic. Omit to let the product assign one.</summary>
+    public string? Topic { get; init; }
 }
 
 /// <summary>INBOX.md <c>messages.send</c> params.</summary>

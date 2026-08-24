@@ -123,13 +123,16 @@ no connect. Pass `InitializeOptions` for blobs, initial topics, or
 |---|---|---|
 | `InitializeAsync` | `initialize` | `SessionSnapshot` |
 | `ConnectAsync` | `session.connect` | `SessionSnapshot` |
-| `PairAsync` | `session.pair` | `SessionSnapshot` |
+| `PairAsync` | `session.pair` | `SessionSnapshot` (`PairAsync(me)` when `capabilities.me` is `claimed`) |
 | `DisconnectAsync` | `session.disconnect` | `SessionSnapshot` |
 | `LogoutAsync` | `session.logout` | `SessionSnapshot` (`new`) |
 | `StatusAsync` | `session.status` | `SessionSnapshot` |
 | `SubscribeAsync` / `UnsubscribeAsync` | `subscribe` / `unsubscribe` | `TopicsResult` (canonical topics) |
 | `ListDirectoryAsync` | `directory.list` | `DirectoryListResult` |
 | `GetDirectoryAsync` | `directory.get` | `DirectoryRow` |
+| `FindDirectoryAsync` | `directory.find` | `DirectoryListResult` |
+| `JoinDirectoryAsync` / `LeaveDirectoryAsync` | `directory.join` / `directory.leave` | `TopicResult` |
+| `CreateDirectoryAsync` | `directory.create` | `TopicResult` |
 | `SendAsync` / `ReactAsync` | `messages.send` | `SendResult` (`Id`, canonical `Topic`) |
 | `ReadAsync` | `messages.read` | `ReadResult` |
 

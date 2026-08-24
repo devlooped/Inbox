@@ -46,7 +46,7 @@ public class DirectoryBookTests
         book.Remember(new DirectoryRow
         {
             Topic = "111@lid",
-            Kind = "user",
+            Kind = DirectoryKind.User,
             Handle = "@ada",
             Name = "Ada",
             Pn = "5491156103511@s.whatsapp.net",
@@ -73,7 +73,7 @@ public class DirectoryBookTests
         book.Remember(new DirectoryRow
         {
             Topic = "5491159278282-1472673286@g.us",
-            Kind = "group",
+            Kind = DirectoryKind.Group,
             Name = "Nosotros",
         });
         book.Remember("5491159278282-1472673286@g.us", "@agus", "agus");
@@ -89,7 +89,7 @@ public class DirectoryBookTests
         book.Remember(new DirectoryRow
         {
             Topic = "12036342@g.us",
-            Kind = "group",
+            Kind = DirectoryKind.Group,
             Name = "Family",
             Participants =
             [
@@ -140,7 +140,7 @@ public class DirectoryBookTests
         book.Remember(new DirectoryRow
         {
             Topic = "111@lid",
-            Kind = "user",
+            Kind = DirectoryKind.User,
             Name = "Any",
             Pn = "5491156103511@s.whatsapp.net",
         });
