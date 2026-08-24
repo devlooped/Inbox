@@ -176,7 +176,7 @@ func (d *Daemon) dispatch(ctx context.Context, req *rpc.Request) (any, *rpc.Erro
 	case "session.connect":
 		return d.sessionConnect(ctx)
 	case "session.pair":
-		return d.sessionPair(ctx)
+		return d.sessionPair(ctx, req.Params)
 	case "session.disconnect":
 		return d.sessionDisconnect()
 	case "session.logout":
@@ -191,6 +191,8 @@ func (d *Daemon) dispatch(ctx context.Context, req *rpc.Request) (any, *rpc.Erro
 		return d.directoryList(req.Params)
 	case "directory.get":
 		return d.directoryGet(ctx, req.Params)
+	case "directory.find", "directory.join", "directory.leave", "directory.create":
+		return nil, errUnsupported("membership")
 	case "messages.send":
 		return d.messagesSend(ctx, req.Params)
 	case "messages.read":
@@ -208,6 +210,7 @@ type initParams struct {
 	Verbosity  string   `json:"verbosity"`
 	Connect    *bool    `json:"connect"`
 	DeviceName string   `json:"deviceName"`
+	Me         string   `json:"me"`
 }
 
 func (d *Daemon) initialize(ctx context.Context, raw json.RawMessage) (any, *rpc.Error) {
@@ -227,6 +230,9 @@ func (d *Daemon) initialize(ctx context.Context, raw json.RawMessage) (any, *rpc
 	}
 	if p.Version != rpc.Version {
 		return nil, rpc.ErrData(rpc.TokUnsupportedVersion, map[string]any{"supported": []string{rpc.Version}})
+	}
+	if strings.TrimSpace(p.Me) != "" {
+		return nil, rpc.ErrData(rpc.TokInvalidParams, "me")
 	}
 	store, err := d.resolveStore(p.Store)
 	if err != nil {
@@ -373,6 +379,8 @@ type statusResult struct {
 func boxCapabilities() map[string]any {
 	return map[string]any{
 		"auth":        []string{"qr"},
+		"me":          "issued",
+		"membership":  "none",
 		"reply":       "quote",
 		"react":       true,
 		"read":        "message",
@@ -451,7 +459,16 @@ func (d *Daemon) sessionConnect(ctx context.Context) (any, *rpc.Error) {
 	return res, nil
 }
 
-func (d *Daemon) sessionPair(ctx context.Context) (any, *rpc.Error) {
+func (d *Daemon) sessionPair(ctx context.Context, raw json.RawMessage) (any, *rpc.Error) {
+	var p struct {
+		Me string `json:"me"`
+	}
+	if err := rpc.DecodeParams(raw, &p); err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(p.Me) != "" {
+		return nil, rpc.ErrData(rpc.TokInvalidParams, "me")
+	}
 	d.mu.Lock()
 	cli := d.wa
 	st := d.status

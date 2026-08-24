@@ -16,7 +16,7 @@ A client implements the methods, events, store/files rules, and error tokens in 
 
 There are **no** per-product method names (`discord.send`, `slack.postMessage`, `graph.chats`, …). A WhatsBox `0.1` client codec MUST be able to speak this envelope without a second framing dialect: extra JSON fields are additive and MUST be ignored by clients that do not understand them.
 
-Suggested binaries (not normative): `whatsbox`, `discordbox`, `slackbox`, `teamsbox`, `telegrambox`, `matrixbox`.
+Suggested binaries (not normative): `whatsbox`, `pubsubbox`, `discordbox`, `slackbox`, `teamsbox`, `telegrambox`, `matrixbox`.
 
 ---
 
@@ -41,6 +41,7 @@ Agents and local apps that can spawn a process, speak newline-delimited JSON-RPC
 - Authenticate via the product’s official path, surfaced as `$session` events a single client can render.
 - Connect, auto-reconnect, disconnect, logout.
 - Directory populate + list/get + live `$directory` updates.
+- When advertised (`capabilities.membership`), find / join / leave / create chats — product membership, **not** subscribe.
 - Subscribe/unsubscribe to chats by **canonical topic** only.
 - Receive live messages and in-chat `meta` on the chat topic; receipts (`ack`) when the product provides them.
 - Send `contents[]` (text, file if `files` is set, reply, react) — as far as advertised capabilities allow.
@@ -48,7 +49,7 @@ Agents and local apps that can spawn a process, speak newline-delimited JSON-RPC
 
 ### 1.4 v1 does not
 
-- Message history, search, backfill, export, FTS.
+- Message history, message search, backfill, export, FTS (`directory.find` is live product lookup of chats, not a transcript search).
 - Store message bodies or last-message previews.
 - Typing indicators or “available” presence (quiet companion).
 - Edit, revoke (“delete for everyone”).
@@ -57,7 +58,7 @@ Agents and local apps that can spawn a process, speak newline-delimited JSON-RPC
 - Named multi-account in one process.
 - Topic wildcards (`#`, `+`, `$all`).
 - Default store path.
-- Per-product RPC methods to paper over gaps. Missing features are **capabilities** (and documented degraded behavior or a stable error token), not extra verbs.
+- Per-product RPC methods to paper over gaps. Missing features are **capabilities** (and documented degraded behavior or a stable error token), not extra verbs. `directory.find` / `join` / `leave` / `create` exist on the method table; products that cannot honor them advertise `membership: "none"` and return `unsupported`.
 
 ---
 
@@ -207,7 +208,9 @@ WhatsApp (reference): 1:1 is a LID JID (`123@lid`); groups are `120363…@g.us`;
 
 ### 4.2 Input acceptance
 
-`subscribe` / `unsubscribe` (and `initialize.subscribe`) accept **canonical topics only**: a directory row’s `topic`, or `$directory`. Names, handles, phones, Slack `#channel` aliases, Discord snowflake-as-mention, Matrix aliases (`#room:server`) are **not** resolved here — the client looks those up with `directory.list` and passes the row’s `topic`. Unknown / unresolvable entries fail the **whole** call (`invalid_topic`; no partial apply).
+`subscribe` / `unsubscribe` (and `initialize.subscribe`) accept **canonical topics only**: a directory row’s `topic`, or `$directory`. Names, handles, phones, Slack `#channel` aliases, Discord snowflake-as-mention, Matrix aliases (`#room:server`) are **not** resolved here — the client looks those up with `directory.list` (roster) or `directory.find` (live product lookup when `membership` is `join` or `create`) and passes the row’s `topic`. Unknown / unresolvable entries fail the **whole** call (`invalid_topic`; no partial apply).
+
+When `capabilities.membership` is `"join"` or `"create"`, subscribe of a chat topic that is **not** on the roster is `not_found` (whole call; no partial apply). `membership: "none"` keeps today’s rule: a canonical topic may be subscribed without a roster row (WhatsApp JID). `$directory` is never a membership check.
 
 These fields MAY accept a product-defined **alias** that the daemon normalizes to a canonical topic (WhatsApp: LID, PN JID, or phone; others: see profiles):
 
@@ -245,7 +248,7 @@ Products that never remap MAY omit `remap`. Clients MUST still handle it.
 - **Inbound events:** `by` is `"me"` or an opaque author id. There is no separate `self` field.
 - **Status snapshot:** the paired id is `me` only. Do not also emit `self`.
 
-v1 stores **no** message bodies. The client that displayed a line is the only place that has quote text; see §6.10 `reply.text`.
+v1 stores **no** message bodies. The client that displayed a line is the only place that has quote text; see §6.14 `reply.text`.
 
 ### 4.5 `context` (optional grouping key)
 
@@ -261,7 +264,20 @@ v1 stores **no** message bodies. The client that displayed a line is the only pl
 
 One Reply action. There is **no** “start a new context” verb in v1: Slack cannot fork a thread from a child. Replying to a child **copies** `e.context` (the root), which is how the client avoids using the child id as `thread_ts` without a daemon history cache.
 
-Products MAY emit `context` even when `capabilities.reply` is `"quote"` (Matrix `m.thread`, Teams channel reply lists). Grouping is data-driven. The `"context"` value only tells the UI that the **first** reply on a message with no `context` yet will **create** a group, not a quote. A stricter always-send variant (zero send-path branch) is in §21.7.
+Products MAY emit `context` even when `capabilities.reply` is `"quote"` (Matrix `m.thread`, Teams channel reply lists). Grouping is data-driven. The `"context"` value only tells the UI that the **first** reply on a message with no `context` yet will **create** a group, not a quote. A stricter always-send variant (zero send-path branch) is in §22.7.
+
+### 4.6 Me binding
+
+`SessionSnapshot.me` / `$session` `paired.me` is the paired **product** identity. How it is bound is `capabilities.me`:
+
+| Value | Who chooses `me` | `me` on `initialize` / `session.pair` |
+|---|---|---|
+| `"issued"` | The product, after auth (WhatsApp LID, Discord bot snowflake, Graph oid) | **Must omit.** Present → `invalid_params`. |
+| `"claimed"` | The client | **Required** on the pairing call. Omit → error token `me_required` (not a `$session` kind). |
+
+`me` on `initialize` is remembered even when `connect` is false and applied to the following `session.pair` / `session.connect`. If initialize and pair both set `me` and they differ → `invalid_params`. Claimed `me` is pair **input**, not pair progress: there is no `me_required` event and no file-watch inject. Device-code / QR wait still happens **inside** `pair({me})` after the name is known.
+
+`deviceName` stays the companion label. It is not `me`.
 
 ---
 
@@ -273,9 +289,9 @@ Products MAY emit `context` even when `capabilities.reply` is `"quote"` (Matrix 
 
 | Field | Type | Description |
 |---|---|---|
-| `product` | string | `whatsapp` \| `discord` \| `slack` \| `teams` \| `telegram` \| `matrix` |
+| `product` | string | `whatsapp` \| `webpubsub` \| `discord` \| `slack` \| `teams` \| `telegram` \| `matrix` |
 | `identity` | string | `user` \| `bot` |
-| `profile` | string? | Product sub-profile when one binary could be either (Telegram: `bot` \| `user`). Omit when identical to `identity`. |
+| `profile` | string? | Product sub-profile when one binary could be either (Telegram: `bot` \| `user`). Omit when identical to `identity`, **or** when the product’s default surface is implied (Web PubSub: omit ≡ Chat hub; a later `profile: "hub"` would be the base hub). |
 | `capabilities` | object | See §5.2. |
 
 A WhatsBox `0.1` codec that does not bind these fields still works: they are additive. A unifying client MUST read them to disable UI / skip RPCs that the product cannot honor.
@@ -287,9 +303,11 @@ Every key below is required on the wire so a client never has to guess.
 | Key | Type | Meaning |
 |---|---|---|
 | `auth` | string[] | How `session.pair` / implicit pair authenticates. Subset of `qr`, `oauth`, `device_code`, `token`. |
+| `me` | `"issued"` \| `"claimed"` | How session `me` is bound. See §4.6. |
+| `membership` | `"none"` \| `"join"` \| `"create"` | Product-side add/remove of this `me` from a chat. Total order: `create` ⊃ `join` ⊃ roster. See below. |
 | `reply` | `"quote"` \| `"context"` \| `"none"` | String enum. JSON `true` / `false` are **not** members and **not** aliases of `"quote"` / `"none"`. `"quote"` = in-chat quote (WhatsApp / Discord / Telegram / Matrix). `"context"` = grouping key (Slack threads): send still uses `reply` plus optional `context` (§4.5); not a quote bubble. `"none"` = `messages.send` with `reply` → `unsupported`. |
 | `react` | boolean | Two-state. A `{type:"reaction"}` content part on `messages.send` works. Off is JSON `false`, not `"none"`. |
-| `read` | `"message"` \| `"cursor"` \| `"conversation"` \| `"none"` | String enum. JSON `true` / `false` are **not** members and **not** aliases of `"none"`. See §6.11. `"none"` = `unsupported`. |
+| `read` | `"message"` \| `"cursor"` \| `"conversation"` \| `"none"` | String enum. JSON `true` / `false` are **not** members and **not** aliases of `"none"`. See §6.15. `"none"` = `unsupported`. |
 | `ack` | boolean | Chat `kind: ack` events (`delivered` / `read` / `played`) will be emitted when the product has them. |
 | `files` | boolean | Product can move blobs through `initialize.files`. Still requires the client to pass `files`. |
 | `attachments` | `"none"` \| `"single"` \| `"many"` | How many **blob parts** (`image` `video` `audio` `document` `sticker`) one `kind: message` may carry. String enum; JSON `false` is **not** `"none"`. |
@@ -308,6 +326,18 @@ There is **no** `e2ee` capability. WhatsApp Signal is inside the library and is 
 
 `files` is blob plumbing (media + icons). `attachments` is cardinality of media **parts**. Missing `initialize.files` is still `files_required` even when `attachments` is `"many"`. Profiles with `attachments: "none"` set `files: false`.
 
+`me` values: see §4.6.
+
+`membership` values:
+
+| Value | RPCs |
+|---|---|
+| `"none"` | `directory.find` / `join` / `leave` / `create` → `unsupported` (`capability: "membership"`). Join happens in the product’s own UI (WhatsApp phone, Discord invite). |
+| `"join"` | `directory.find`, `directory.join`, `directory.leave`. `directory.create` → `unsupported`. |
+| `"create"` | `"join"` plus `directory.create`. |
+
+Find / join / leave / create are **online-only** (`disconnected` when not `online`). Roster `list` / `get` remain valid offline. Join writes the roster and does **not** subscribe. Leave ends product membership, `$directory` `remove`s the row, and drops a held subscription. `unsubscribe` never leaves the product.
+
 `read` values:
 
 | Value | `messages.read` behavior |
@@ -325,9 +355,9 @@ There is **no** `e2ee` capability. WhatsApp Signal is inside the library and is 
 | `"context"` | RPC **succeeds**. The daemon posts into the grouping key `context` if provided, else `reply.id` (start a group rooted at that message). `reply.text` MAY be ignored. Not a quote bubble — the client SHOULD group by `context` and MUST NOT draw a WhatsApp-style citation. Documented lossy mapping vs quotes, not `unsupported`. |
 | `"none"` | `messages.send` with `reply` → `unsupported` with `error.data.capability = "reply"`. |
 
-A daemon MUST advertise only the members in the tables above. In particular it MUST NOT put JSON `true` or `false` on `reply`, `read`, or `attachments` — those are not synonyms of `"none"`. Two-state keys (`react`, `ack`, `files`) stay JSON booleans.
+A daemon MUST advertise only the members in the tables above. In particular it MUST NOT put JSON `true` or `false` on `reply`, `read`, `attachments`, `me`, or `membership` — those are not synonyms of `"none"`. Two-state keys (`react`, `ack`, `files`) stay JSON booleans.
 
-A client that receives a boolean or unknown string on `reply` / `read` / `attachments` MAY hide the action (same UI as `"none"`) so a non-conformant daemon does not crash it. That is fail-closed parsing, not a second legal value: the client MUST NOT echo the boolean and MUST NOT document it as valid.
+A client that receives a boolean or unknown string on `reply` / `read` / `attachments` / `me` / `membership` MAY hide the action (same UI as `"none"` / issued) so a non-conformant daemon does not crash it. That is fail-closed parsing, not a second legal value: the client MUST NOT echo the boolean and MUST NOT document it as valid.
 
 When the advertised capability does not allow a send/read field:
 
@@ -338,13 +368,15 @@ When the advertised capability does not allow a send/read field:
 | `read: "none"` | `messages.read` | `unsupported` (`capability: "read"`). |
 | `attachments: "none"` | any blob part | `unsupported` (`capability: "attachments"`). |
 | `attachments: "single"` | two or more blob parts | `unsupported` (`capability: "attachments"`). |
+| `membership: "none"` | `directory.find` / `join` / `leave` / `create` | `unsupported` (`capability: "membership"`). |
+| `membership: "join"` | `directory.create` | `unsupported` (`capability: "membership"`). |
 
 Do not silently drop a content part the client set.
 
 ### 5.3 Example status snapshot
 
 ```json
-{"version":"0.1","status":"online","me":"123456789012345678","product":"discord","identity":"bot","topics":["$session","$directory"],"capabilities":{"auth":["token"],"reply":"quote","react":true,"read":"none","ack":false,"files":true,"attachments":"many"}}
+{"version":"0.1","status":"online","me":"123456789012345678","product":"discord","identity":"bot","topics":["$session","$directory"],"capabilities":{"auth":["token"],"me":"issued","membership":"none","reply":"quote","react":true,"read":"none","ack":false,"files":true,"attachments":"many"}}
 ```
 
 ---
@@ -365,7 +397,8 @@ Only these methods exist in v1. This is the WhatsBox v1 noun set. Products MUST 
   "subscribe": ["$directory"],
   "verbosity": "info",
   "connect": true,
-  "deviceName": "box on DESKTOP-ADA"
+  "deviceName": "box on DESKTOP-ADA",
+  "me": "alice"
 }
 ```
 
@@ -378,6 +411,7 @@ Only these methods exist in v1. This is the WhatsBox v1 noun set. Products MUST 
 | `verbosity` | no | stderr level. |
 | `connect` | no | If `true`, implicit `session.connect` after subscriptions are installed. Default `false`. |
 | `deviceName` | no | Display name for this companion (WhatsApp linked-device name; Matrix `device_display_name`; others MAY ignore). Omitted or blank → `{bin} on {hostname}`. |
+| `me` | if `capabilities.me` is `"claimed"` and this call (or a later pair) will pair | Claimed product identity. See §4.6. Issued products MUST omit. |
 
 **Store resolution**
 
@@ -399,10 +433,10 @@ Apply `subscribe` (plus implicit `$session`) **before** any event is eligible fo
 **Result** (already paired, `connect` omitted)
 
 ```json
-{"version":"0.1","status":"offline","me":"111@lid","product":"whatsapp","identity":"user","topics":["$session","$directory"],"capabilities":{"auth":["qr"],"reply":"quote","react":true,"read":"message","ack":true,"files":true,"attachments":"single"}}
+{"version":"0.1","status":"offline","me":"111@lid","product":"whatsapp","identity":"user","topics":["$session","$directory"],"capabilities":{"auth":["qr"],"me":"issued","membership":"none","reply":"quote","react":true,"read":"message","ack":true,"files":true,"attachments":"single"}}
 ```
 
-If never paired and `connect` is not true: `"status":"new"`, `me` omitted. `product` / `capabilities` are still present so the client can render the right auth UI before connecting.
+If never paired and `connect` is not true: `"status":"new"`, snapshot `me` omitted (claimed `params.me` is stored for the later pair, not echoed as paired identity). `product` / `capabilities` are still present so the client can render the right auth UI and, when `capabilities.me` is `"claimed"`, collect `me` before `connect` / `pair`.
 
 ### 6.2 `session.connect`
 
@@ -422,10 +456,15 @@ Bring up the product connection. `initialize` with `connect: true` is this metho
 
 Start the product’s auth flow and wait until linked (or fail).
 
+```json
+{"me": "alice"}
+```
+
+- `me`: see §4.6. Claimed: required here unless `initialize` already supplied it. Issued: omit.
 - Already paired (`offline` or `online`): **no-op**, return current status. To re-pair the client MUST `session.logout` first.
 - Auth progress is `$session` events (see §7.1). Client renders the latest. No per-event reply.
 - Success: `{kind:"paired"}` then the session is linked. Pairing **ends connected** when invoked standalone; when invoked from `connect`, `connect` finishes `online`.
-- Failure: `{kind:"pair_error", message}` and the RPC fails with `pair_error`.
+- Failure: `{kind:"pair_error", message}` and the RPC fails with `pair_error`. Claimed pair without `me` fails immediately with `me_required` (no `$session` event, no device-code wait).
 
 ### 6.4 `session.disconnect`
 
@@ -444,7 +483,7 @@ See §2.4. Result is `session.status` with `status: "new"`.
   "product": "whatsapp",
   "identity": "user",
   "topics": ["$session", "$directory"],
-  "capabilities": {"auth":["qr"],"reply":"quote","react":true,"read":"message","ack":true,"files":true,"attachments":"single"}
+  "capabilities": {"auth":["qr"],"me":"issued","membership":"none","reply":"quote","react":true,"read":"message","ack":true,"files":true,"attachments":"single"}
 }
 ```
 
@@ -465,11 +504,12 @@ See §2.4. Result is `session.status` with `status: "new"`.
 **Result:** `{topics:[…]}` canonical topics actually applied.
 
 - Display name / roster are **not** on this result. Call `directory.get` if needed.
-- Names, handles, phones, aliases are `invalid_topic`. Resolve with `directory.list`.
+- Names, handles, phones, aliases are `invalid_topic`. Resolve with `directory.list` (or `directory.find` when membership allows).
 - Unknown entries fail the whole call (no partial apply).
+- When `membership` is `"join"` or `"create"`, a chat topic with no roster row is `not_found` (whole call).
 - `$session` cannot be unsubscribed.
 - Subscribing an already-subscribed topic is a no-op.
-- Newly subscribed chats get **no replay**; next live event onward.
+- Newly subscribed chats get **no replay**; next live event onward. `directory.join` does **not** subscribe.
 
 ### 6.8 `directory.list`
 
@@ -486,7 +526,7 @@ See §2.4. Result is `session.status` with `status: "new"`.
 
 **Result:** `{items: [DirectoryRow], cursor?}`. No `cursor` (or empty) means last page.
 
-There is **no** sort-by-last-message (we do not store it). Order: implementation-defined but stable (recommend name, then topic). Directory search stays on this RPC — never on `subscribe`.
+There is **no** sort-by-last-message (we do not store it). Order: implementation-defined but stable (recommend name, then topic). This RPC searches the **roster**. Live product lookup of chats this `me` could join is `directory.find`. Never search on `subscribe`.
 
 ### 6.9 `directory.get`
 
@@ -511,7 +551,58 @@ There is **no** sort-by-last-message (we do not store it). Order: implementation
 
 `list` / `$directory` upsert never carry `icon`. Missing entity → `not_found`.
 
-### 6.10 `messages.send`
+### 6.10 `directory.find`
+
+Live product lookup of chats this `me` **could** join. Does **not** write the roster. `membership: "none"` → `unsupported`. Not `online` → `disconnected`.
+
+Params: same object as `directory.list` (`query?`, `kind?`, `limit?`, `cursor?`). Empty `query` = first page of what the product will show.
+
+**Result:** `{items: [DirectoryRow], cursor?}` — same page shape as list. Rows include canonical `topic` and `kind`. A `kind: "user"` row is a person this `me` may open a 1:1 with; it is **not** yet a roster chat. Subscribe of a find hit that was not joined → `not_found`.
+
+### 6.11 `directory.join`
+
+```json
+{"id":"opaque-canonical-topic"}
+```
+
+Add this `me` to an existing chat (or open a 1:1 from a `kind: "user"` find topic). Canonical topic only (from find, create, or the roster). Names / aliases → `invalid_topic`.
+
+- `membership: "none"` → `unsupported`. Not `online` → `disconnected`.
+- Already a member → no-op `{topic}`.
+- A `kind: "user"` topic MAY remap to a group/1:1 chat topic: upsert the new row, `$session` `{kind:"remap", from, to}`, result `{topic}` is the **canonical chat** after remap. Further send/subscribe use `to`.
+- Writes the roster. Does **not** subscribe.
+- **Result:** `{topic}`.
+
+### 6.12 `directory.leave`
+
+```json
+{"id":"opaque-canonical-topic"}
+```
+
+End product membership. Canonical topic only.
+
+- `membership: "none"` → `unsupported`. Not `online` → `disconnected`.
+- Not a member → `not_found`.
+- On success: product leave, `$directory` `remove`, drop a held subscription if any. `unsubscribe` never does this.
+- **Result:** `{topic}` of the chat left (canonical).
+
+### 6.13 `directory.create`
+
+```json
+{"name":"Project Falcon","topic":"falcon"}
+```
+
+Create a **group**. `name` required. `topic` optional (claimed id); omit → the product assigns one.
+
+- `membership` other than `"create"` → `unsupported`. Not `online` → `disconnected`.
+- Always `kind: "group"`. 1:1 is `directory.join` of a user topic from find, not create.
+- `$` prefix / garbage `topic` → `invalid_topic`.
+- Same `me` already has this topic → no-op `{topic}`.
+- Another occupant holds that topic → `topic_taken`.
+- Writes the roster. Does **not** subscribe. No participant list (invitees join themselves).
+- **Result:** `{topic}`.
+
+### 6.14 `messages.send`
 
 ```json
 {
@@ -561,7 +652,7 @@ Rules:
 
 Daemon **never** looks up quote bodies. `reply.text` is optional but required for a visible quote on clients that do not have history (every Box consumer).
 
-### 6.11 `messages.read`
+### 6.15 `messages.read`
 
 ```json
 {"to":"opaque-group","ids":["3EB0…","3EB1…"],"by":"999@lid"}
@@ -821,13 +912,15 @@ JSON-RPC application errors use codes in the `-32000`…`-32099` range. `error.m
 | `unsupported_version` | -32006 | `version` not `"0.1"` |
 | `not_paired` | -32007 | Action needs keys/tokens |
 | `pair_error` | -32008 | Auth failed |
-| `not_found` | -32009 | `directory.get` / unknown topic resolution |
-| `invalid_topic` | -32010 | `$` reserved, bad topic, alias on subscribe, unsubscribe `$session` |
+| `not_found` | -32009 | `directory.get` / unknown topic resolution / subscribe of a non-roster chat when `membership` is `join` or `create` / `directory.leave` when not a member |
+| `invalid_topic` | -32010 | `$` reserved, bad topic, alias on subscribe or `directory.join` / `leave`, unsubscribe `$session` |
 | `files_required` | -32011 | Blob op without `files` |
 | `path_escape` | -32012 | `path` outside `files` |
-| `invalid_params` | -32013 | Missing `by` on read / reply / react, etc. |
-| `disconnected` | -32014 | Needs `online` (send, read, live resolve) |
-| `unsupported` | -32015 | Advertised capability does not allow the action (`react` `false`, `reply`/`read`/`attachments` `"none"`, or `attachments: "single"` with two blob parts), **or** the topic cannot honor the RPC (ciphertext-only room). When it is a capability gap, `error.data.capability` names the key (`read`, `reply`, `react`, `attachments`, …). |
+| `invalid_params` | -32013 | Missing `by` on read / reply / react, `me` on an issued product, etc. |
+| `disconnected` | -32014 | Needs `online` (send, read, find/join/leave/create, live resolve) |
+| `unsupported` | -32015 | Advertised capability does not allow the action (`react` `false`, `reply`/`read`/`attachments` `"none"`, `membership: "none"` on find/join/leave/create, `membership: "join"` on create, or `attachments: "single"` with two blob parts), **or** the topic cannot honor the RPC (ciphertext-only room). When it is a capability gap, `error.data.capability` names the key (`read`, `reply`, `react`, `attachments`, `membership`, …). |
+| `me_required` | -32016 | `capabilities.me` is `"claimed"` and `me` was omitted on pair / connecting initialize |
+| `topic_taken` | -32017 | `directory.create` `{topic}` is held by another occupant |
 
 Standard JSON-RPC: `parse_error` -32700, `invalid_request` -32600, `method_not_found` -32601.
 
@@ -842,8 +935,8 @@ A single client (the WhatsBox managed codec, a REPL, an agent) implements the me
 | Concern | Client does | Client does not |
 |---|---|---|
 | Framing | NDJSON JSON-RPC 2.0, named params, `event` notifications | Product REST, Gateway opcodes, Graph payloads, MCP |
-| Find a chat | `directory.list` then `subscribe` with `row.topic` | Subscribe by name / phone / `#channel` |
-| Auth UX | Render `$session` `qr` / `oauth` / `device_code` / `token_required` | Product-specific pair RPCs |
+| Find a chat | `directory.list` (roster) or `directory.find` then `directory.join` (when advertised) then `subscribe` with `row.topic` | Subscribe by name / phone / `#channel`; join via `subscribe` |
+| Auth UX | Render `$session` `qr` / `oauth` / `device_code` / `token_required`; if `capabilities.me` is `"claimed"`, pass `me` on pair | Product-specific pair RPCs; a `me_required` **event** |
 | Capabilities | Read `product` + `capabilities`; hide or skip impossible actions | Call `discord.read` because WhatsApp has blue ticks |
 | `by` / topics / `context` | Copy opaque strings | Parse `@lid`, snowflakes, `thread_ts`, `!room:server` |
 | Grouping | If any event on the topic has `context`, bucket by it; else flat | Per-product thread APIs; `context` as a subscribe topic |
@@ -863,9 +956,9 @@ If a section of a profile required per-product client method names, that profile
 
 | Method | In | Out |
 |---|---|---|
-| `initialize` | `version`, `store?`, `files?`, `subscribe?`, `verbosity?`, `connect?`, `deviceName?` | status snapshot (`connect:true` ⇒ `session.connect`) including `product` + `capabilities` |
+| `initialize` | `version`, `store?`, `files?`, `subscribe?`, `verbosity?`, `connect?`, `deviceName?`, `me?` | status snapshot (`connect:true` ⇒ `session.connect`) including `product` + `capabilities` |
 | `session.connect` | — | status (`new` ⇒ implicit pair) |
-| `session.pair` | — | status (no-op if already linked) |
+| `session.pair` | `me?` | status (no-op if already linked) |
 | `session.disconnect` | — | status |
 | `session.logout` | — | status `new` |
 | `session.status` | — | `{me?, status, topics, product, identity, capabilities}` |
@@ -873,6 +966,10 @@ If a section of a profile required per-product client method names, that profile
 | `unsubscribe` | `{topics}` | `{topics}` remaining |
 | `directory.list` | `{query?, kind?, limit?, cursor?}` | `{items, cursor?}` |
 | `directory.get` | `{id, icon?}` | `DirectoryRow` |
+| `directory.find` | `{query?, kind?, limit?, cursor?}` | `{items, cursor?}` (not roster) |
+| `directory.join` | `{id}` | `{topic}` |
+| `directory.leave` | `{id}` | `{topic}` |
+| `directory.create` | `{name, topic?}` | `{topic}` |
 | `messages.send` | `{to, contents, reply?, context?}` | `{id, topic}` |
 | `messages.read` | `{to, ids, by}` | `{topic}` |
 
@@ -889,6 +986,8 @@ Canon: [`docs/WHATSBOX.md`](WHATSBOX.md), [`docs/RFC-1.md`](RFC-1.md). Library: 
 | `product` | `whatsapp` |
 | `identity` | `user` |
 | `capabilities.auth` | `["qr"]` |
+| `me` | `"issued"` |
+| `membership` | `"none"` |
 | `reply` | `"quote"` (ContextInfo quote; `reply.text` stub; no `remoteJid` on same-chat quotes). Never emit `context`. |
 | `react` | `true` |
 | `read` | `"message"` |
@@ -911,6 +1010,8 @@ Implementation difficulty: **3 / 5** (done in this repo). Hard parts are LID can
 | `product` | `discord` |
 | `identity` | `bot` |
 | `capabilities.auth` | `["token"]` |
+| `me` | `"issued"` |
+| `membership` | `"none"` |
 | `reply` | `"quote"` (`message_reference`) |
 | `react` | `true` (`PUT …/reactions/{emoji}/@me`) |
 | `read` | `"none"` — Discord [does not have read receipts](https://paul.koeck.dev/writeups/discord-read-receipts); bot ACK of a channel is not a user-visible tick |
@@ -989,6 +1090,8 @@ Degraded client-visible behavior: `read: "none"` → `messages.read` errors `uns
 | `identity` | `bot` | `user` |
 | `profile` | `bot` | `user` |
 | `auth` | `["token"]` (both tokens in store) or `["oauth"]` | `["oauth"]` |
+| `me` | `"issued"` | `"issued"` |
+| `membership` | `"none"` | `"none"` |
 | `reply` | `"context"` | `"context"` |
 | `react` | `true` (`reactions.add` / `remove`) | `true` |
 | `read` | `"cursor"` | `"cursor"` |
@@ -1064,6 +1167,8 @@ Personal Microsoft accounts are **not** supported by Teams chat Graph APIs. `ide
 | `product` | `teams` | `teams` |
 | `identity` | `user` | `bot` |
 | `auth` | `["device_code"]` or `["oauth"]` | `["token"]` (client credentials in store) + admin consent |
+| `me` | `"issued"` | `"issued"` |
+| `membership` | `"none"` | `"none"` |
 | `reply` | `"quote"` (`chatMessage` `replyToId` / replies collection) | `"quote"` |
 | `react` | `true` (`setReaction` / `unsetReaction`) | `true` |
 | `read` | `"conversation"` (`markChatReadForUser`, **beta**, delegated only) | `"none"` (application cannot mark a user’s chat read) |
@@ -1152,6 +1257,8 @@ HTTP Bot API, token from [@BotFather](https://core.telegram.org/bots). `identity
 | `identity` | `bot` |
 | `profile` | `bot` |
 | `auth` | `["token"]` |
+| `me` | `"issued"` |
+| `membership` | `"none"` |
 | `reply` | `"quote"` (`reply_parameters` / `reply_to_message_id`) |
 | `react` | `true` (`setMessageReaction`) |
 | `read` | `"none"` (bots do not send user-visible read receipts) |
@@ -1185,6 +1292,8 @@ Native client protocol (TDLib / Telethon / GramJS / MadelineProto). `identity: u
 | `identity` | `user` |
 | `profile` | `user` |
 | `auth` | `["qr"]` and/or `["token"]` (phone code is rendered as `qr` **or** `device_code` — see below) |
+| `me` | `"issued"` |
+| `membership` | `"none"` |
 | `reply` | `"quote"` |
 | `react` | `true` |
 | `read` | `"cursor"` (`messages.readHistory` / `channels.readHistory` — up-to id, not WhatsApp per-message blue ticks in groups) |
@@ -1221,6 +1330,8 @@ A binary MAY support only `profile: bot`. A binary that supports both MUST adver
 | `product` | `matrix` |
 | `identity` | `user` |
 | `auth` | `["token"]` (access_token in store) and/or `["oauth"]` / password via `token_required` |
+| `me` | `"issued"` |
+| `membership` | `"none"` |
 | `reply` | `"quote"` (`m.in_reply_to` / `m.relates_to`) |
 | `react` | `true` (`m.reaction` + `m.annotation`) |
 | `read` | `"cursor"` (`POST …/receipt/m.read/{eventId}` — up-to event, threaded receipts exist but v1 sends unthreaded) |
@@ -1284,33 +1395,95 @@ Degraded: encrypted rooms are visible in the directory but live as `kind: messag
 
 ---
 
-## 20. Capability and difficulty matrix
+## 20. Azure Web PubSub mapping
+
+**Official identity:** a Chat hub **user** (`userId` in a client access URL). There is no external bot portal: the client **claims** `me`. Adapter canon: [`docs/PUBSUBBOX.md`](PUBSUBBOX.md). Omit `profile` (implied Chat hub; a later `profile: "hub"` would be the base hub).
+
+| Field | Value |
+|---|---|
+| `product` | `webpubsub` |
+| `identity` | `user` |
+| `profile` | omit |
+| `auth` | `["device_code", "token"]` |
+| `me` | `"claimed"` |
+| `membership` | `"create"` |
+| `reply` | `"none"` |
+| `react` | `false` |
+| `read` | `"none"` |
+| `ack` | `false` |
+| `files` | `true` |
+| `attachments` | `"single"` |
+
+### 20.1 Auth
+
+`session.pair({me})` (or `initialize` with `me` + `connect: true`). Missing `me` → `me_required`.
+
+Device code (`az-cli` inside the adapter) is `$session` `device_code`. A pre-minted client access URL in the store is `token` (skip Entra). Hub / resource are store-only: after Entra, one Chat hub → use it; otherwise `$session` `token_required` `{path:"credentials.json", hint:"hub"}`. No `hub` field on the RPC.
+
+`me` on the wire is the Chat `userId`, never the Entra UPN.
+
+### 20.2 Topics and directory
+
+Groups: Chat `roomId` → `kind: "group"`. 1:1: `directory.find` may return `{topic: userId, kind: "user"}`; `directory.join` opens/reuses the DM room, `$session` `remap` to the room topic. Roster key is the room. Subscribe requires a roster row (`not_found` otherwise).
+
+`directory.create` `{name, topic?}` is a group. `directory.find` / `join` / `leave` are live and online-only.
+
+Populate after `online`: rooms this `me` already belongs to. History is **not** live (§7.4).
+
+### 20.3 Live path
+
+Chat client WebSocket (reliable reconnect is catch-up on **current** subscriptions only). Local; no public webhook. Stdout is `event` notifications.
+
+### 20.4 Send / reply / react / read
+
+| RPC | Native | Degraded |
+|---|---|---|
+| send | Chat text, or one blob via the adapter’s storage overlay (PUBSUBBOX.md) | `attachments: "single"`. Caption = optional `text` part. Extra blob parts → `unsupported`. |
+| reply | — | `unsupported` (`capability: "reply"`). Chat `CreateMessage` / `refMessageId` is not implemented. |
+| react | — | `unsupported` (`capability: "react"`). |
+| read | — | `unsupported` (`capability: "read"`). `chat.markRead` is not implemented. |
+
+### 20.5 Files
+
+`files: true`. Bytes never on JSON-RPC. The adapter uploads to the hub’s storage account and points the Chat message at the URL; inbound downloads into `files` then notifies. How that is stored on Chat (`content.binary`, blob metadata) is **not** client-visible — [`docs/PUBSUBBOX.md`](PUBSUBBOX.md).
+
+### 20.6 Difficulty
+
+**2 / 5.** Chat SDK + claimed `me` + membership verbs. Hard parts are Entra device-code pairing, hub selection, and the blob overlay. No hosted ingress.
+
+Degraded: no quotes, reactions, or receipts; one blob + optional caption; public blob URLs in v1 (SAS later).
+
+---
+
+## 21. Capability and difficulty matrix
 
 Legend: **Diff** = implementation difficulty 1 (easiest) … 5 (hardest) for a gateway that already speaks this protocol. WhatsApp is the reference (already shipped).
 
-| | WhatsApp | Discord | Slack | Teams | Telegram Bot | Telegram user | Matrix |
-|---|---|---|---|---|---|---|---|
-| **Official identity** | Linked device (user) | **Bot only** (self-bots forbidden) | Bot app (optional user token) | Graph delegated user (or app + admin consent) | BotFather bot | MTProto user client | CS API user |
-| `product` | `whatsapp` | `discord` | `slack` | `teams` | `telegram` | `telegram` | `matrix` |
-| `identity` | `user` | `bot` | `bot` (default) | `user` (default) | `bot` | `user` | `user` |
-| **Auth** | QR (`qr`) | Token in store (`token_required`) | Token(s) or OAuth | Device code / OAuth / client secret | Bot token | API_ID + QR/code + 2FA | access_token / password / SSO |
-| **Live path** | Local WS (whatsmeow) | Local Gateway WS (ingress does not replace it) | Socket Mode **or** HTTP Events API via hosted ingress | Hosted HTTPS `notificationUrl` → bus → bridge. Delta poll = air-gapped fallback only | `getUpdates` **or** `setWebhook` via ingress | Local MTProto updates | Local `/sync` long-poll (optional host fan-in) |
-| **Reply** | Quote (ContextInfo) | `message_reference` | **`thread_ts` via `context` (not a quote)** | `replyToId` / channel replies + inbound `context` | `reply_parameters` | MTProto reply | `m.in_reply_to` + optional `m.thread` `context` |
-| `reply` cap. | `"quote"` | `"quote"` | **`"context"`** | `"quote"` | `"quote"` | `"quote"` | `"quote"` |
-| **Reactions** | yes | yes | yes (Slack names) | `setReaction` | `setMessageReaction` (inbound 1:1 hole) | yes | `m.reaction` |
-| `react` | `true` | `true` | `true` | `true` | `true` | `true` | `true` |
-| **Mark-read** | Per-message blue ticks | **None** | `conversations.mark` cursor | Whole-chat `markChatReadForUser` (beta, delegated); channels `unsupported` | **None** | History up-to id | `m.read` up-to event |
-| `read` | `message` | **`none` → `unsupported`** | **`cursor` (not ticks)** | **`conversation` or `none`** | **`none` → `unsupported`** | `cursor` | `cursor` |
-| **Acks to sender** | delivered/read/played | **none** | **none** | **none** | **none** | not mapped | `m.receipt` → `ack:read` |
-| `ack` | `true` | `false` | `false` | `false` | `false` | `false` | `true` |
-| **Files** | download then path | attachment URL → path | `files.uploadV2` | hosted contents | `getFile` (size cap) | MTProto download | `mxc://` |
-| `files` | `true` | `true` | `true` | `true` | `true` | `true` | `true` |
-| `attachments` | `"single"` | `"many"` | `"many"` | `"many"` | `"single"` | `"single"` | `"single"` |
-| **E2EE** | Signal (library; not client-visible) | n/a | n/a | n/a | n/a | secret chats → `message`+`unknown` / `unsupported` | **Olm/Megolm out of v1** (per-room `message`+`unknown` / `unsupported`) |
-| **Directory** | contacts + groups + HistorySync headers | guilds/channels bot is in | conversations token can see | `/me/chats` + joined teams | chats the bot has seen | dialogs + contacts | joined rooms + `m.direct` |
-| **Diff** | 3 (shipped) | **2** | **3** | **4** | **1** | **4** | **3** (5 with crypto) |
+| | WhatsApp | Discord | Slack | Teams | Telegram Bot | Telegram user | Matrix | Web PubSub |
+|---|---|---|---|---|---|---|---|---|
+| **Official identity** | Linked device (user) | **Bot only** (self-bots forbidden) | Bot app (optional user token) | Graph delegated user (or app + admin consent) | BotFather bot | MTProto user client | CS API user | Chat hub user (`userId` claimed) |
+| `product` | `whatsapp` | `discord` | `slack` | `teams` | `telegram` | `telegram` | `matrix` | `webpubsub` |
+| `identity` | `user` | `bot` | `bot` (default) | `user` (default) | `bot` | `user` | `user` | `user` |
+| `me` cap. | `"issued"` | `"issued"` | `"issued"` | `"issued"` | `"issued"` | `"issued"` | `"issued"` | **`"claimed"`** |
+| `membership` | `"none"` | `"none"` | `"none"` | `"none"` | `"none"` | `"none"` | `"none"` | **`"create"`** |
+| **Auth** | QR (`qr`) | Token in store (`token_required`) | Token(s) or OAuth | Device code / OAuth / client secret | Bot token | API_ID + QR/code + 2FA | access_token / password / SSO | Device code + token |
+| **Live path** | Local WS (whatsmeow) | Local Gateway WS (ingress does not replace it) | Socket Mode **or** HTTP Events API via hosted ingress | Hosted HTTPS `notificationUrl` → bus → bridge. Delta poll = air-gapped fallback only | `getUpdates` **or** `setWebhook` via ingress | Local MTProto updates | Local `/sync` long-poll (optional host fan-in) | Local Chat WebSocket |
+| **Reply** | Quote (ContextInfo) | `message_reference` | **`thread_ts` via `context` (not a quote)** | `replyToId` / channel replies + inbound `context` | `reply_parameters` | MTProto reply | `m.in_reply_to` + optional `m.thread` `context` | **none** |
+| `reply` cap. | `"quote"` | `"quote"` | **`"context"`** | `"quote"` | `"quote"` | `"quote"` | `"quote"` | **`"none"`** |
+| **Reactions** | yes | yes | yes (Slack names) | `setReaction` | `setMessageReaction` (inbound 1:1 hole) | yes | `m.reaction` | **none** |
+| `react` | `true` | `true` | `true` | `true` | `true` | `true` | `true` | **`false`** |
+| **Mark-read** | Per-message blue ticks | **None** | `conversations.mark` cursor | Whole-chat `markChatReadForUser` (beta, delegated); channels `unsupported` | **None** | History up-to id | `m.read` up-to event | **None** |
+| `read` | `message` | **`none` → `unsupported`** | **`cursor` (not ticks)** | **`conversation` or `none`** | **`none` → `unsupported`** | `cursor` | `cursor` | **`none` → `unsupported`** |
+| **Acks to sender** | delivered/read/played | **none** | **none** | **none** | **none** | not mapped | `m.receipt` → `ack:read` | **none** |
+| `ack` | `true` | `false` | `false` | `false` | `false` | `false` | `true` | `false` |
+| **Files** | download then path | attachment URL → path | `files.uploadV2` | hosted contents | `getFile` (size cap) | MTProto download | `mxc://` | storage overlay (PUBSUBBOX.md) |
+| `files` | `true` | `true` | `true` | `true` | `true` | `true` | `true` | `true` |
+| `attachments` | `"single"` | `"many"` | `"many"` | `"many"` | `"single"` | `"single"` | `"single"` | `"single"` |
+| **E2EE** | Signal (library; not client-visible) | n/a | n/a | n/a | n/a | secret chats → `message`+`unknown` / `unsupported` | **Olm/Megolm out of v1** (per-room `message`+`unknown` / `unsupported`) | n/a |
+| **Directory** | contacts + groups + HistorySync headers | guilds/channels bot is in | conversations token can see | `/me/chats` + joined teams | chats the bot has seen | dialogs + contacts | joined rooms + `m.direct` | rooms this `me` is in; find/join/create |
+| **Diff** | 3 (shipped) | **2** | **3** | **4** | **1** | **4** | **3** (5 with crypto) | **2** |
 
-### 20.1 Gaps — degraded behavior (not “unsupported, ignore”)
+### 21.1 Gaps — degraded behavior (not “unsupported, ignore”)
 
 | Gap | Advertisement | Client-visible behavior |
 |---|---|---|
@@ -1325,25 +1498,30 @@ Legend: **Diff** = implementation difficulty 1 (easiest) … 5 (hardest) for a g
 | Telegram Bot vs user | `profile: "bot"` \| `"user"` | Bot cannot see the human’s other chats. User profile is a different store/identity. |
 | Telegram Bot: no read receipts | `read: "none"` | `messages.read` → `unsupported`. |
 | Telegram Bot: 1:1 inbound reactions | `react: true` (send works) | Inbound `kind: reaction` may never arrive in private chats. Client must tolerate silence. |
+| Web PubSub: claimed `me` | `me: "claimed"` | Pass `me` on `initialize` / `session.pair`. Omit → `me_required`. |
+| Web PubSub: no registrar | `membership: "create"` | `directory.find` / `join` / `leave` / `create`. Subscribe is not join. |
+| Web PubSub: no quotes/reacts/receipts | `reply: "none"`, `react: false`, `read: "none"`, `ack: false` | Those RPCs → `unsupported`. |
+| Web PubSub: one blob + caption | `attachments: "single"`, `files: true` | Extra blob parts → `unsupported`. Caption = optional `text` part (adapter stores it on the blob). |
 | Matrix E2EE rooms | (no capability; per-room) | Inbound ciphertext → `kind: message` + `unknown` `label: "encrypted"`. Send/read/react → `unsupported` (no `error.data.capability`). Room still listed. Plaintext rooms in the same session work. |
 | All: no history API | (v1 scope) | Late subscribe / restart: no replay. Initial `/sync` / delta / HistorySync bodies are not events. |
 
-### 20.2 Suggested implementation order
+### 21.2 Suggested implementation order
 
 1. **Telegram Bot** (diff 1) — prove the common envelope on a second product with `getUpdates`.
-2. **Discord Bot** (diff 2) — Gateway push, bot identity, `read: "none"` error path.
-3. **Matrix unencrypted** (diff 3) — `/sync` cursor discipline, `ack: read`, E2EE degradation.
-4. **Slack Bot + Socket Mode** (diff 3) — `reply: "context"`, inbound `context`, `read: "cursor"`.
-5. **Telegram MTProto user** (diff 4) — user-companion parity with WhatsApp.
-6. **Teams Graph** (diff 4) — hosted ingress + Entra + dual chat/channel. Delta-poll only as bring-up fallback.
+2. **Web PubSub Chat** (diff 2) — claimed `me`, `membership: "create"`, `read: "none"` / `reply: "none"`. Canon: PUBSUBBOX.md.
+3. **Discord Bot** (diff 2) — Gateway push, bot identity, `read: "none"` error path.
+4. **Matrix unencrypted** (diff 3) — `/sync` cursor discipline, `ack: read`, E2EE degradation.
+5. **Slack Bot + Socket Mode** (diff 3) — `reply: "context"`, inbound `context`, `read: "cursor"`.
+6. **Telegram MTProto user** (diff 4) — user-companion parity with WhatsApp.
+7. **Teams Graph** (diff 4) — hosted ingress + Entra + dual chat/channel. Delta-poll only as bring-up fallback.
 
 ---
 
-## 21. Implementer notes (not the client contract)
+## 22. Implementer notes (not the client contract)
 
 Facts an implementer should not rediscover. Not visible to the JSON-RPC client except as capabilities / errors already specified.
 
-### 21.1 Hosted ingress
+### 22.1 Hosted ingress
 
 - One hosted function MAY serve many local bridges: route on a store/session id in the bus topic / SignalR group / Service Bus session.
 - Verify Slack signing secret, Graph clientState, Telegram secret token **on the host**. Do not forward unverified bodies.
@@ -1352,39 +1530,39 @@ Facts an implementer should not rediscover. Not visible to the JSON-RPC client e
 - Dedupe by native message id: Graph, Slack, and Service Bus are at-least-once.
 - Do not write client `files` from the host. Download in the process that owns `initialize.files`.
 
-### 21.2 Discord
+### 22.2 Discord
 
 - `Authorization: Bot {token}`. Never a user token.
 - `MESSAGE_CONTENT` is privileged; without it, `MESSAGE_CREATE` has empty `content` (map to an `unknown` part or empty `text` — prefer empty `text` only when blob parts still classify the message).
 - Threads are channels; v1 treats a thread id as its own `group` topic. Do not invent a thread RPC. Do not put that id in `context` on the parent.
 - No official read-receipt API for bots. Userdoccers `POST /channels/{id}/messages/{id}/ack` is a **user** read-state endpoint; using it with a bot token is not an official companion feature and MUST NOT be mapped to `messages.read`.
 
-### 21.3 Slack
+### 22.3 Slack
 
 - Socket Mode: ack `envelope_id` even when dropping for subscribe filters, or Slack retries.
 - `chat.postMessage` `thread_ts` starts or continues a thread; it does not attach a quote. Map `thread_ts` ↔ `context`. `reply_broadcast` is out of v1. Prefer client-supplied `context` over `reply.id` so a reply to a child does not become a new root.
 - `conversations.mark` requires membership; bot marks the **bot’s** cursor, which users do not see as ticks.
 
-### 21.4 Teams
+### 22.4 Teams
 
 - Resource data in change notifications is encrypted with a certificate you provision on the **host**. The local process should see decrypted `chatMessage` JSON (or notification-without-data + a Graph GET).
 - `markChatReadForUser` is **beta** and delegated. Treat 4xx as `unsupported` rather than looping.
 - Throttling is aggressive; honor `Retry-After`. Overflow still applies to the in-memory per-topic queue after an event is mapped.
 - Delta poll is an implementer fallback when `ingress` is missing from the store — not a client-visible mode.
 
-### 21.5 Telegram
+### 22.5 Telegram
 
 - Bot API `getUpdates` and webhooks are mutually exclusive; with ingress, call `setWebhook`, otherwise `getUpdates`.
 - Bot privacy mode in groups is a product setting, not a protocol switch.
 - MTProto: persist auth key; a second process with the same key is a second session (`store_locked` still applies locally). Ingress is irrelevant (updates are already a local socket).
 
-### 21.6 Matrix
+### 22.6 Matrix
 
 - Store `next_batch` even when offline so a crash does not re-emit a timeline.
 - `m.relates_to` for replies/reactions is plaintext even in encrypted rooms (server aggregations); v1 still does not decrypt bodies.
 - Media: authenticated media (`/_matrix/client/v1/media/download/…`) on modern homeservers; fall back to `/_matrix/media/v3/download/…`.
 
-### 21.7 Stricter agnostic Reply (always send `context`)
+### 22.7 Stricter agnostic Reply (always send `context`)
 
 §4.5 / §12 say: send `context: e.context ?? e.id` only when `capabilities.reply` is `"context"`. That is one branch on the send path.
 
@@ -1400,15 +1578,22 @@ Keep advertising `"context"` anyway: the **UI** still needs to know that the fir
 
 Recommended for new unifying clients. Gateways MUST still ignore unknown `context` when `reply` is `"quote"`, and MUST prefer outbound `context` over `reply.id` when `reply` is `"context"`.
 
+### 22.8 Web PubSub Chat
+
+Blob overlay, Entra/`az-cli` cache, hub `token_required`, and Chat invoke whitelist: [`docs/PUBSUBBOX.md`](PUBSUBBOX.md). Do not put Azure URLs or `content.binary` on JSON-RPC.
+
 ---
 
-## 22. Key trade-offs
+## 23. Key trade-offs
 
 | Choice | Rejected | Why |
 |---|---|---|
 | One method table for every product | Per-product RPCs / MCP tools named after REST | A WhatsBox 0.1 codec must work. Gaps are capabilities + tokens. |
 | Opaque topics / `by` | Typed JIDs, snowflakes, MXIDs on the client | Client copies strings. Directory `kind` is the only enum. |
-| Subscribe canonical-only | Alias / name subscribe | Search is `directory.list`. Ambiguous names need a picker. |
+| Subscribe canonical-only | Alias / name subscribe | Roster search is `directory.list`. Live join lookup is `directory.find`. Ambiguous names need a picker. |
+| Claimed `me` is pair input | `$session` `me_required` event / file watch | QR completes off-RPC; a nickname cannot. Error token `me_required`. |
+| `membership` `none` \| `join` \| `create` | Subscribe-as-join, or a `create` boolean | Join is product membership. Create ⊃ join. WhatsApp stays `"none"`. |
+| Web PubSub omits `profile` | `profile: "chat"` | Omitted ≡ Chat hub. A later base hub would set `profile: "hub"`. |
 | Store-based blobs | Base64 / multipart on JSON-RPC | Same-machine paths. No `files` ⇒ text-only. |
 | NDJSON, no batches, stderr = logs | LSP headers, JSON-RPC arrays, logs on stdout | WhatsBox 0.1 dialect. |
 | No `live` capability | `live: "push"` (constant) or `"poll"` | Inbound is always `event` notifications. A one-value capability that clients must ignore is not a capability. Fetch (WS / long-poll / ingress / delta) stays behind the daemon. |
@@ -1423,11 +1608,11 @@ Recommended for new unifying clients. Gateways MUST still ignore unknown `contex
 
 ---
 
-## 23. Relationship to WhatsBox
+## 24. Relationship to WhatsBox
 
-This document is **Inbox Client Protocol (ICP)** (also the managed `Inbox` client). [`docs/WHATSBOX.md`](WHATSBOX.md) is the **WhatsApp profile** for the native `whatsbox` adapter in this Inbox repository: store layout, LID canonicalization, HistorySync headers, ContextInfo `remoteJid`, group `MarkRead` participant, and the shipped `whatsbox` binary. The `WhatsBox` NuGet is the managed host on top of that adapter. This spec does not restate the method table, event envelope, or error tokens.
+This document is **Inbox Client Protocol (ICP)** (also the managed `Inbox` client). [`docs/WHATSBOX.md`](WHATSBOX.md) is the **WhatsApp profile** for the native `whatsbox` adapter. [`docs/PUBSUBBOX.md`](PUBSUBBOX.md) is the **Azure Web PubSub Chat profile** for `pubsubbox`. Neither restates the method table, event envelope, or error tokens.
 
-A `whatsbox` binary is a conformant ICP implementation when it speaks this envelope (including `product`, `identity`, and `capabilities` on `initialize` / `session.status`) and maps WhatsApp as in WHATSBOX.md + RFC-1.
+A `whatsbox` binary is a conformant ICP implementation when it speaks this envelope (including `product`, `identity`, and `capabilities` on `initialize` / `session.status`) and maps WhatsApp as in WHATSBOX.md + RFC-1. A `pubsubbox` binary is conformant when it maps Chat as in PUBSUBBOX.md (claimed `me`, `membership: "create"`, files overlay).
 
 Wire version stays **`"0.1"`** so one codec spans the family.
 

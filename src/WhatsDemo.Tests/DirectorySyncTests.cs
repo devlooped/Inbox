@@ -19,7 +19,7 @@ public class DirectorySyncTests
                 return Task.FromResult(new DirectoryRow
                 {
                     Topic = id,
-                    Kind = "user",
+                    Kind = DirectoryKind.User,
                     Handle = "@ada",
                     Name = "Ada",
                 });
@@ -55,7 +55,7 @@ public class DirectorySyncTests
                 return Task.FromResult(new DirectoryRow
                 {
                     Topic = "111@lid",
-                    Kind = "user",
+                    Kind = DirectoryKind.User,
                     Handle = "@ada",
                     Name = "Ada",
                     Pn = "+15551234567",
@@ -99,7 +99,7 @@ public class DirectorySyncTests
                 Task.FromResult(new DirectoryRow
                 {
                     Topic = id.Contains("111", StringComparison.Ordinal) ? "111@lid" : id,
-                    Kind = "user",
+                    Kind = DirectoryKind.User,
                     Handle = "@ada",
                     Name = "Ada",
                 }));
@@ -131,7 +131,7 @@ public class DirectorySyncTests
                 return Task.FromResult(new DirectoryRow
                 {
                     Topic = id,
-                    Kind = "user",
+                    Kind = DirectoryKind.User,
                     Handle = "@ada",
                     Name = "Ada",
                 });
@@ -164,7 +164,7 @@ public class DirectorySyncTests
             var sync = new DirectorySync(book, path, ["111@lid"], (_, _) =>
             {
                 got++;
-                return Task.FromResult(new DirectoryRow { Topic = "111@lid", Kind = "user", Name = "Ada" });
+                return Task.FromResult(new DirectoryRow { Topic = "111@lid", Kind = DirectoryKind.User, Name = "Ada" });
             });
 
             await sync.ResolveAsync("111@lid");
@@ -196,7 +196,7 @@ public class DirectorySyncTests
             var sync = DirectorySync.Load(book, dir, (_, _) => Task.FromResult(new DirectoryRow
             {
                 Topic = "111@lid",
-                Kind = "user",
+                Kind = DirectoryKind.User,
             }));
 
             Assert.Equal(["111@lid"], sync.InitialSubscribe);

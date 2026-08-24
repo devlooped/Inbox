@@ -87,9 +87,21 @@ public class InboxClient : IDisposable, IAsyncDisposable
     public Task<SessionSnapshot> ConnectAsync(CancellationToken cancellationToken = default)
         => InvokeAsync("session.connect", InboxJsonContext.Default.SessionSnapshot, cancellationToken);
 
-    /// <summary>Inbox Protocol <c>session.pair</c>.</summary>
+    /// <summary>Inbox Protocol <c>session.pair</c>. Issued products omit <c>me</c>.</summary>
     public Task<SessionSnapshot> PairAsync(CancellationToken cancellationToken = default)
         => InvokeAsync("session.pair", InboxJsonContext.Default.SessionSnapshot, cancellationToken);
+
+    /// <summary>Inbox Protocol <c>session.pair</c> with a claimed <paramref name="me"/>.</summary>
+    public Task<SessionSnapshot> PairAsync(string me, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(me);
+        return InvokeAsync(
+            "session.pair",
+            new SessionPairParams { Me = me },
+            JsonRpcContext.Default.JsonRpcRequestSessionPairParams,
+            InboxJsonContext.Default.SessionSnapshot,
+            cancellationToken);
+    }
 
     /// <summary>Inbox Protocol <c>session.disconnect</c>.</summary>
     public Task<SessionSnapshot> DisconnectAsync(CancellationToken cancellationToken = default)
@@ -152,6 +164,54 @@ public class InboxClient : IDisposable, IAsyncDisposable
             new DirectoryGetParams { Id = id, Icon = icon },
             JsonRpcContext.Default.JsonRpcRequestDirectoryGetParams,
             InboxJsonContext.Default.DirectoryRow,
+            cancellationToken);
+    }
+
+    /// <summary>Inbox Protocol <c>directory.find</c> (live product lookup; not the roster).</summary>
+    public Task<DirectoryListResult> FindDirectoryAsync(DirectoryListOptions? options = null, CancellationToken cancellationToken = default)
+    {
+        options ??= new DirectoryListOptions();
+        return InvokeAsync(
+            "directory.find",
+            options,
+            JsonRpcContext.Default.JsonRpcRequestDirectoryListOptions,
+            InboxJsonContext.Default.DirectoryListResult,
+            cancellationToken);
+    }
+
+    /// <summary>Inbox Protocol <c>directory.join</c>. Canonical topic only. Does not subscribe.</summary>
+    public Task<TopicResult> JoinDirectoryAsync(string id, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(id);
+        return InvokeAsync(
+            "directory.join",
+            new DirectoryTopicParams { Id = id },
+            JsonRpcContext.Default.JsonRpcRequestDirectoryTopicParams,
+            InboxJsonContext.Default.TopicResult,
+            cancellationToken);
+    }
+
+    /// <summary>Inbox Protocol <c>directory.leave</c>. Canonical topic only. Drops a held subscription.</summary>
+    public Task<TopicResult> LeaveDirectoryAsync(string id, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(id);
+        return InvokeAsync(
+            "directory.leave",
+            new DirectoryTopicParams { Id = id },
+            JsonRpcContext.Default.JsonRpcRequestDirectoryTopicParams,
+            InboxJsonContext.Default.TopicResult,
+            cancellationToken);
+    }
+
+    /// <summary>Inbox Protocol <c>directory.create</c>. Always a group. Does not subscribe.</summary>
+    public Task<TopicResult> CreateDirectoryAsync(string name, string? topic = null, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        return InvokeAsync(
+            "directory.create",
+            new DirectoryCreateParams { Name = name, Topic = topic },
+            JsonRpcContext.Default.JsonRpcRequestDirectoryCreateParams,
+            InboxJsonContext.Default.TopicResult,
             cancellationToken);
     }
 

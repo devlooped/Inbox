@@ -247,13 +247,13 @@ static async Task DispatchAsync(
             {
                 var snap = await box.LogoutAsync(cancellation);
                 session.ClearIdentity();
-                output.WriteLine($"status {snap.Status}");
+                output.WriteLine($"status {snap.Status.ToString().ToLowerInvariant()}");
                 break;
             }
         case "disconnect":
             {
                 var snap = await box.DisconnectAsync(cancellation);
-                output.WriteLine($"status {snap.Status}");
+                output.WriteLine($"status {snap.Status.ToString().ToLowerInvariant()}");
                 break;
             }
         case "connect":
@@ -261,7 +261,7 @@ static async Task DispatchAsync(
                 var snap = await box.ConnectAsync(cancellation);
                 session.NoteIdentity(snap.Me);
                 sync.NoteSelf(snap.Me);
-                output.WriteLine($"status {snap.Status}");
+                output.WriteLine($"status {snap.Status.ToString().ToLowerInvariant()}");
                 await EnsureSubscribedAsync(box, sync, snap.Me, cancellation);
                 break;
             }

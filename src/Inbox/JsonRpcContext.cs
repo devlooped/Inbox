@@ -6,12 +6,16 @@ namespace Inbox;
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
     PropertyNameCaseInsensitive = true,
     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-    GenerationMode = JsonSourceGenerationMode.Metadata)]
+    GenerationMode = JsonSourceGenerationMode.Metadata,
+    UseStringEnumConverter = true)]
 [JsonSerializable(typeof(JsonRpcRequest))]
 [JsonSerializable(typeof(JsonRpcRequest<InitializeOptions>))]
+[JsonSerializable(typeof(JsonRpcRequest<SessionPairParams>))]
 [JsonSerializable(typeof(JsonRpcRequest<TopicsParams>))]
 [JsonSerializable(typeof(JsonRpcRequest<DirectoryListOptions>))]
 [JsonSerializable(typeof(JsonRpcRequest<DirectoryGetParams>))]
+[JsonSerializable(typeof(JsonRpcRequest<DirectoryTopicParams>))]
+[JsonSerializable(typeof(JsonRpcRequest<DirectoryCreateParams>))]
 [JsonSerializable(typeof(JsonRpcRequest<MessagesSendParams>))]
 [JsonSerializable(typeof(JsonRpcRequest<MessagesReadParams>))]
 [JsonSerializable(typeof(ContentPart))]

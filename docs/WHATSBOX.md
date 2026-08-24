@@ -66,6 +66,8 @@ Agents and local apps that can spawn a process, speak newline-delimited JSON-RPC
 | `identity` | `user` |
 | `profile` | omit (same as `identity`) |
 | `capabilities.auth` | `["qr"]` |
+| `me` | `"issued"` |
+| `membership` | `"none"` |
 | `reply` | `"quote"` |
 | `react` | `true` |
 | `read` | `"message"` |

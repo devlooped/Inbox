@@ -59,7 +59,7 @@ public class TopicResolverTests
                 Assert.Equal("Nosotros", q);
                 return Task.FromResult<IReadOnlyList<DirectoryRow>>(
                 [
-                    new() { Topic = "12036399@g.us", Kind = "group", Name = "Nosotros" },
+                    new() { Topic = "12036399@g.us", Kind = DirectoryKind.Group, Name = "Nosotros" },
                 ]);
             },
             (_, _) => throw new InvalidOperationException("unique hit must not pick"));
@@ -85,8 +85,8 @@ public class TopicResolverTests
     {
         DirectoryRow[] rows =
         [
-            new() { Topic = "111@lid", Kind = "user", Name = "Ana", Handle = "@ana" },
-            new() { Topic = "222@lid", Kind = "user", Name = "Analía" },
+            new() { Topic = "111@lid", Kind = DirectoryKind.User, Name = "Ana", Handle = "@ana" },
+            new() { Topic = "222@lid", Kind = DirectoryKind.User, Name = "Analía" },
         ];
 
         var result = await TopicResolver.ResolveAsync(
@@ -111,8 +111,8 @@ public class TopicResolverTests
             "Ana",
             (_, _) => Task.FromResult<IReadOnlyList<DirectoryRow>>(
             [
-                new() { Topic = "111@lid", Kind = "user", Name = "Ana" },
-                new() { Topic = "222@lid", Kind = "user", Name = "Analía" },
+                new() { Topic = "111@lid", Kind = DirectoryKind.User, Name = "Ana" },
+                new() { Topic = "222@lid", Kind = DirectoryKind.User, Name = "Analía" },
             ]),
             (_, _) => Task.FromResult<string?>(null));
 
@@ -125,8 +125,8 @@ public class TopicResolverTests
     {
         var items = TopicResolver.Completions(
         [
-            new() { Topic = "12036399@g.us", Kind = "group", Name = "Nosotros" },
-            new() { Topic = "999@lid", Kind = "user", Handle = "@ada", Name = "Ada" },
+            new() { Topic = "12036399@g.us", Kind = DirectoryKind.Group, Name = "Nosotros" },
+            new() { Topic = "999@lid", Kind = DirectoryKind.User, Handle = "@ada", Name = "Ada" },
         ]);
 
         Assert.Equal("12036399@g.us", items[0].Insert);

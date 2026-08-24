@@ -1,3 +1,5 @@
+using Inbox;
+
 namespace WhatsDemo.Tests;
 
 public class SlashCommandsTests
@@ -127,7 +129,7 @@ public class UnsubscribeCompletionsTests
         book.Remember(new Inbox.DirectoryRow
         {
             Topic = "12036342@g.us",
-            Kind = "group",
+            Kind = DirectoryKind.Group,
             Name = "Nosotros",
         });
         var session = new DemoSession(book);
@@ -153,7 +155,7 @@ public class UnsubscribeCompletionsTests
         book.Remember(new Inbox.DirectoryRow
         {
             Topic = "12036342@g.us",
-            Kind = "group",
+            Kind = DirectoryKind.Group,
             Name = "Nosotros",
         });
         var session = new DemoSession(book);

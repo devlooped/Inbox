@@ -76,6 +76,10 @@ public class InboxProtocolSpecTests
             "unsubscribe",
             "directory.list",
             "directory.get",
+            "directory.find",
+            "directory.join",
+            "directory.leave",
+            "directory.create",
             "messages.send",
             "messages.read",
         ];
@@ -143,7 +147,11 @@ public class InboxProtocolSpecTests
         Assert.Contains("### 18.1 Bot API", spec, StringComparison.Ordinal);
         Assert.Contains("### 18.2 MTProto user client", spec, StringComparison.Ordinal);
         Assert.Contains("## 19. Matrix mapping", spec, StringComparison.Ordinal);
+        Assert.Contains("## 20. Azure Web PubSub mapping", spec, StringComparison.Ordinal);
         Assert.Contains("WhatsApp reference profile", spec, StringComparison.Ordinal);
+        Assert.Contains("`webpubsub`", spec, StringComparison.Ordinal);
+        Assert.Contains("\"claimed\"", spec, StringComparison.Ordinal);
+        Assert.Contains("\"create\"", spec, StringComparison.Ordinal);
 
         Assert.Contains("self-bot", spec, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Bot only", spec, StringComparison.Ordinal);
@@ -159,7 +167,7 @@ public class InboxProtocolSpecTests
     public void Capability_matrix_covers_auth_reply_react_read_files_difficulty()
     {
         var matrix = MatrixSection();
-        foreach (var product in new[] { "WhatsApp", "Discord", "Slack", "Teams", "Telegram Bot", "Telegram user", "Matrix" })
+        foreach (var product in new[] { "WhatsApp", "Discord", "Slack", "Teams", "Telegram Bot", "Telegram user", "Matrix", "Web PubSub" })
             Assert.Contains(product, matrix, StringComparison.Ordinal);
 
         foreach (var header in new[] { "Auth", "Live path", "Reply", "Reactions", "Mark-read", "Files", "Diff" })
@@ -187,7 +195,7 @@ public class InboxProtocolSpecTests
         Assert.Contains("`reply: \"context\"`", spec, StringComparison.Ordinal);
         Assert.Contains("`reply: \"quote\"`", spec, StringComparison.Ordinal);
         Assert.Contains("**not** aliases", spec, StringComparison.Ordinal);
-        Assert.Contains("MUST NOT put JSON `true` or `false` on `reply`, `read`, or `attachments`", spec, StringComparison.Ordinal);
+        Assert.Contains("MUST NOT put JSON `true` or `false` on `reply`, `read`, `attachments`, `me`, or `membership`", spec, StringComparison.Ordinal);
         Assert.Contains("`false` is not `\"none\"`", spec, StringComparison.Ordinal);
         Assert.Contains("`attachments: \"single\"`", spec, StringComparison.Ordinal);
         Assert.Contains("capability: \"attachments\"", spec, StringComparison.Ordinal);
@@ -201,6 +209,10 @@ public class InboxProtocolSpecTests
         Assert.Contains("identity: \"bot\"", spec, StringComparison.Ordinal);
         Assert.Contains("### 2.5 Hosted ingress", spec, StringComparison.Ordinal);
         Assert.Contains("no** `webhook.register` method", spec, StringComparison.Ordinal);
+        Assert.Contains("`me_required`", spec, StringComparison.Ordinal);
+        Assert.Contains("`topic_taken`", spec, StringComparison.Ordinal);
+        Assert.Contains("`capabilities.me`", spec, StringComparison.Ordinal);
+        Assert.Contains("`capabilities.membership`", spec, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -260,7 +272,7 @@ public class InboxProtocolSpecTests
         Assert.Contains("Group by `context`", spec, StringComparison.Ordinal);
         Assert.Contains("Discord **threads are channels**", spec, StringComparison.Ordinal);
         Assert.DoesNotContain("`reply: \"thread\"`", spec, StringComparison.Ordinal);
-        Assert.Contains("### 21.7 Stricter agnostic Reply", spec, StringComparison.Ordinal);
+        Assert.Contains("### 22.7 Stricter agnostic Reply", spec, StringComparison.Ordinal);
         Assert.Contains("zero** capability branch", spec, StringComparison.Ordinal);
     }
 
@@ -275,9 +287,9 @@ public class InboxProtocolSpecTests
 
     string MatrixSection()
     {
-        var start = spec.IndexOf("## 20. Capability and difficulty matrix", StringComparison.Ordinal);
+        var start = spec.IndexOf("## 21. Capability and difficulty matrix", StringComparison.Ordinal);
         Assert.True(start >= 0, "missing capability matrix section");
-        var end = spec.IndexOf("\n## 21.", start, StringComparison.Ordinal);
+        var end = spec.IndexOf("\n## 22.", start, StringComparison.Ordinal);
         Assert.True(end > start, "matrix not bounded");
         return spec[start..end];
     }
