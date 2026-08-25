@@ -1,3 +1,7 @@
+[![EULA](https://img.shields.io/badge/EULA-OSMF-blue?labelColor=black&color=C9FF30)](osmfeula.txt)
+[![OSS](https://img.shields.io/github/license/devlooped/oss.svg?color=blue)](license.txt)
+[![GitHub](https://img.shields.io/badge/-source-181717.svg?logo=GitHub)](https://github.com/devlooped/Inbox)
+
 The [`Inbox`](https://www.nuget.org/packages/Inbox) package is the managed
 **Inbox Client Protocol (ICP)** client (`InboxClient`) plus non-transitive MSBuild targets
 for adapters that ship a native sidecar.
@@ -24,3 +28,9 @@ The adapter:
    `InboxIncludeNativeAfterTargets`).
 2. Packs the pointer: `dotnet pack` → adapter DLL + `runtime.json`.
 3. Packs each RID: `dotnet pack -r {rid}` → `runtimes/{rid}/native/` only.
+
+<!-- include https://github.com/devlooped/.github/raw/main/osmf.md -->
+
+<!-- include https://github.com/devlooped/sponsors/raw/main/footer.md -->
+
+<!-- exclude -->
