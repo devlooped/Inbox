@@ -1,5 +1,17 @@
 # Changelog
 
+## [v0.2.0](https://github.com/devlooped/Inbox/tree/v0.2.0) (2026-08-24)
+
+[Full Changelog](https://github.com/devlooped/Inbox/compare/v0.1.5...v0.2.0)
+
+:sparkles: Implemented enhancements:
+
+- Advertise claimed me, membership verbs, and typed protocol capabilities [\#22](https://github.com/devlooped/Inbox/pull/22) (@kzu)
+- Extract pointer and RID packing into Inbox.targets [\#18](https://github.com/devlooped/Inbox/pull/18) (@kzu)
+- Move native Go sidecar into src/WhatsBox.Native [\#17](https://github.com/devlooped/Inbox/pull/17) (@kzu)
+- Add agent skill setup for GitHub issues, triage, and domain docs [\#16](https://github.com/devlooped/Inbox/pull/16) (@kzu)
+- Rename Box Protocol to Inbox Protocol and extract Inbox.csproj [\#14](https://github.com/devlooped/Inbox/pull/14) (@kzu)
+
 ## [v0.1.5](https://github.com/devlooped/Inbox/tree/v0.1.5) (2026-08-20)
 
 [Full Changelog](https://github.com/devlooped/Inbox/compare/v0.1.4...v0.1.5)
