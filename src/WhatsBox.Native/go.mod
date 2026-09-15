@@ -3,7 +3,7 @@ module github.com/devlooped/whatsbox
 go 1.26.0
 
 require (
-	go.mau.fi/whatsmeow v0.0.0-20260828224850-0fadda796019
+	go.mau.fi/whatsmeow v0.0.0-20260914150520-0d3b644136bf
 	golang.org/x/sys v0.47.0
 	google.golang.org/protobuf v1.36.12
 	modernc.org/sqlite v1.44.3
