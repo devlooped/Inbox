@@ -13,7 +13,7 @@
   <ItemGroup>
     <PackageReference Include="JsonPeek" Version="1.3.0" PrivateAssets="all" GeneratePathProperty="true" />
     <PackageReference Include="JsonPoke" Version="1.3.0" PrivateAssets="all" GeneratePathProperty="true" />
-    <PackageReference Include="Readme" Version="1.2.1" PrivateAssets="all" />
+    <PackageReference Include="Readme" Version="1.2.2" PrivateAssets="all" />
   </ItemGroup>
   <ItemGroup>
     <None Update="build\Inbox.targets" Pack="true" PackagePath="build\Inbox.targets" />
