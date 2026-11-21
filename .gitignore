@@ -2,11 +2,8 @@ bin
 obj
 out
 artifacts
-external
 pack
 agent-tools
-.tools
-.store
 terminals
 TestResults
 results
@@ -14,7 +11,6 @@ BenchmarkDotNet.Artifacts
 mcps
 /app
 /temp
-/runtimes
 .vs
 .vscode
 .genaiscript
@@ -51,3 +47,5 @@ _site
 .sass-cache
 Gemfile.lock
 package-lock.json
+
+/.github/.labels
